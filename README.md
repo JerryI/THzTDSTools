@@ -4,7 +4,7 @@ A small library for material parameter extraction from time-domain THz spectra, 
 
 *Developed at University of Augsburg, Germany 🇩🇪*
 
-> Hands-on notebook with several use cases is available at [https://jerryi.github.io/THzTDSTools/](https://jerryi.github.io/THzTDSTools/)
+🔗 Hands-on notebook with several use cases is available at [Example.html](https://jerryi.github.io/THzTDSTools/Example.html)
  
 ## Data format and units
 
