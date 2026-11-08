@@ -1,0 +1,203 @@
+Notebook[{Cell["Time-Domain Terahertz Spectroscopy Tools", "Title"], 
+  Cell["This small library is designed mainly for processing time-domain data \
+in __transmission optics__. It includes:\n\n- signal (kernel) \
+deconvolution;\n- seamless conversion between the time and frequency \
+domains;\n- projections from linear to circular bases;\n- extraction of \
+material parameters (absorption, refractive index, etc.), including \
+__multiple-beam propagation and Fresnel losses__;\n- __advanced 1D phase \
+unwrapping__ guided by the Kramers\[Dash]Kronig relation;\n- optical-response \
+modeling for thin and thick slabs;\n- band-pass filtering and apodization of \
+time traces;\n\nAll functions are strongly typed but also support multiple \
+input patterns: time-domain data is automatically converted to the frequency \
+domain if needed. Iterative solvers are implemented in OpenCL, with C \
+functions running on the CPU as a fallback and a WL implementation serving as \
+a secondary fallback if the C version fails to load.\n\n> Github repository \
+https://github.com/JerryI/THzTDSTools\n\nLet's get started!", "Text"], 
+  Cell["PacletDirectoryLoad[NotebookDirectory[]]; ", "Input"], 
+  Cell["Get[\"JerryI`THzTDSTools`\"]\n({#1, Pane[Text[Information[#1, \
+\"Usage\"]], 300]} & ) /@ Names[\"JerryI`THzTDSTools`*\"]; \nTableForm[%]", 
+   "Input"], Cell["Material parameter extraction", "Section"], 
+  Cell["Here is an example of a typical THz-TDS workflow using data measured \
+with a *Toptica TeraFlash (2013)* spectrometer.", "Text"], 
+  Cell["(* LOAD YOUR DATA *)\
+\nShallow[sam]", "Input"], Cell["ListLinePlot[{sam, ref}, PlotLegends -> \
+{\"Sample\", \"Reference\"}, AxesLabel -> {\"\[Tau] (ps)\", \"Signal\"}, \
+PlotRange -> Full]", "Input"], Cell["The sample and reference \
+(empty-aperture) signals must be assigned exact units (`\"Seconds\"` or \
+`\"Millimeters\"` of delay-stage motion).", "Text"], 
+  Cell[
+   "{sam, ref} = (QuantityArray[#1, {\"Picoseconds\", 1}] & ) /@ {sam, ref}; \
+", "Input"], Cell["Now we can plot both channels and adjust the range to the \
+region with the highest SNR.", "Text"], 
+  Cell["{fsam, fref} = FrequencySpectrumTrim /@ TD2FD[{sam, ref}]", "Input"], 
+  Cell["`TD2FD` returns an array of triplets containing frequency, amplitude, \
+and phase\[LongDash]that is, in Euler form.", "Text"], 
+  Cell["Normal[First[fsam]]", "Input"], Cell["Let's plot it.", "Text"], 
+  Cell["ToStandardOpticsUnits /@ {fsam, fref}; \n%[[All,All,{1, 2}]]; \
+\nListLinePlot[%, Frame -> True, PlotRange -> Full, FrameLabel -> {\"freq. \
+(THz)\", \"Amplitude\"}, PlotLegends -> {\"Sample\", \"Reference (hole)\"}]", 
+   "Input"], Cell["In linear-response theory, the resulting sample signal is \
+the convolution of the <abbr title=\"impulse response \
+function\">IRF</abbr>(or transmission function) and the probe signal \
+(reference):\n\n$$\n\\\\text{sample}(\\\\tau) = \
+\\\\text{reference}(\\\\tau)~\\\\ast~t(\\\\tau)\n$$\n\nThe function \
+$t(\\\\tau)$, or its Fourier transform $t(\\\\omega)$, contains all \
+information about the sample.\n\n:::note\nWe recommend performing all \
+transformations in the time domain whenever possible.\n:::\n\nLet's explore \
+this:", "Text"], Cell["t = DeconvolveTraces[sam, ref]; \
+\nListLinePlot[ToStandardOpticsUnits[t], Frame -> True, PlotRange -> Full, \
+PlotRange -> Full, FrameLabel -> {\"\[Tau] (ps)\", \"t(\[Tau])\"}, PlotLabel \
+-> \"Time-domain\"]\nToStandardOpticsUnits[FrequencySpectrumTrim[TD2FD[t]]]; \
+\nListLinePlot[%[[All,{1, 2}]], Frame -> True, PlotRange -> Full, PlotRange \
+-> Full, FrameLabel -> {\"\[Omega] (THz)\", \"|t(\[Omega])|\"}, PlotLabel -> \
+\"Frequency-domain\"]", "Input"], Cell["The modulus of $t(\\\\omega)$ \
+corresponds to the transmission spectrum. Given the thickness of the measured \
+sample and the aperture difference between the sample and reference \
+measurements, the **absorption coefficient** $\\\\alpha(\\\\omega)$ can be \
+estimated:", "Text"], Cell["EstimateMaterialParameter[\"\[Alpha]\"][t, \
+Quantity[0.6, \"Millimeters\"], \"Gain\" -> 1.2, Method -> \"Basic\"]; \
+\nSelect[ToStandardOpticsUnits[%], #1[[1]] > 0.3 && #1[[1]] < 3.65 & ]; \
+\nListLinePlot[%, Frame -> True, PlotRange -> Full, FrameLabel -> {\"\[Omega] \
+(THz)\", \"\[Alpha] (1/cm)\"}]", "Input"], Cell["Advanced methods", 
+   "Section"], Cell["The `\"Basic\"` method \
+assumes:\n$$\n\\\\alpha(\\\\omega) = - \\\\frac{16 n_0^2}{(n_0+1)^4} \
+\\\\frac{2}{d} ~log~|t(\\\\omega)|,\n$$\n\nwhere $n_0$ is the average \
+refractive index, estimated automatically from the pulse delay.\nThis \
+equation holds for *optically thick samples* with strong absorption. In the \
+general case, however, $\\\\alpha$ is:\n\n$$\n\\\\alpha(\\\\omega) = \
+\\\\frac{2 \\\\omega~\\\\Im~n(\\\\omega)}{c}\n$$\n\nTo estimate $n$ from the \
+complex transmission function $t$, one must iteratively solve the Fresnel \
+equations: <cite >[Withayachumnankul, W., Ferguson, B., Rainsford, T., \
+Mickan, S. P., & Abbott, D. (2005). Material parameter extraction for \
+terahertz time-domain spectroscopy using fixed-point iteration. Proceedings \
+of SPIE, 5649, 142\[Dash]153. doi.org]</cite>\n\nThe most general material \
+response for a slab-like sample is modeled as:\n\n$$\nt(\\\\omega)= \
+\\\\underbrace{\\\\frac{4 n(\\\\omega)}{[1+ \
+n(\\\\omega)]^2}}_{\\\\text{interface transmission}} \
+\\\\underbrace{\\\\exp\\\\!\\\\left[i\\\\frac{\\\\omega L}{c}\\\\bigl( \
+n(\\\\omega)-1\\\\bigr)\\\\right]}_{\\\\text{single pass}} \
+\\\\underbrace{\\\\frac{1}{ 1-\\\\left(\\\\frac{ n(\\\\omega)-1}{ \
+n(\\\\omega)+1}\\\\right)^2 \\\\exp\\\\!\\\\left(2i\\\\frac{\\\\omega L}{c} \
+n(\\\\omega)\\\\right) }}_{\\\\text{Fabry\[Dash]P\[EAcute]rot \
+term}}\n$$\n\n\n### Phase unwrapping\n`TD2FD` stores the principal Fourier \
+phase in the range from $-\\\\pi$ to $\\\\pi$. A sampled wrapped phase does \
+not, by itself, tell us how many full $2\\\\pi$ turns occur between frequency \
+bins. The usual nearest-neighbor unwrap therefore becomes unreliable when the \
+phase changes rapidly or the transmission reaches a deep minimum (for \
+example, near a sharp excitation). This library offers a Kramers\[Dash]Kronig \
+(KK)-guided method that uses the measured magnitude to help choose those \
+turns.\n\nHere are all the built-in methods for comparison:", "Text"], 
+  Cell["$methods = {None, \"Basic\", \"KK\", \"KKGuided\", \
+\"KKGuidedMultiscale\"}; \n(UnwrapPhase[t, Method -> #1, \
+\"RemoveLinearPhase\" -> True] & ) /@ $methods; \nToStandardOpticsUnits /@ \
+FrequencySpectrumTrim /@ %; \nListLinePlot[%[[All,All,{1, 3}]], Frame -> \
+True, PlotRange -> {{0.25, 3.}, {-5, 20}}, FrameLabel -> {\"\[Omega] (THz)\", \
+\"\[Phi]\"}, PlotLegends -> ToString /@ $methods, PlotLabel -> \"Phase \
+unwrapping\"]", "Input"], Cell["The difference between `KKGuided` and \
+`KKGuidedMultiscale` is that the latter also considers neighboring bins to \
+verify that the local background level remains consistent. ==The latter \
+method outperforms the others in this particular case==.", "Text"], 
+  Cell["### Iterative method\nBy setting `Method` to `\"Iterative\"`, we can \
+estimate the material parameters more accurately by using almost all of the \
+information available in the measured time traces. Let's compare the two \
+methods.", "Text"], Cell["unwrapped = UnwrapPhase[t, Method -> \
+\"KKGuidedMultiscale\"]; \
+\nListLinePlot[{EstimateMaterialParameter[\"\[Alpha]\", unwrapped, \
+Quantity[0.6, \"Millimeters\"], \"Gain\" -> 1.2], \
+EstimateMaterialParameter[\"\[Alpha]\", unwrapped, Quantity[0.6, \
+\"Millimeters\"], Method -> \"Iterative\", \"Gain\" -> 1.2]}, PlotRange -> \
+{{0.2, 4.}, {-20, 160}}, Frame -> True, FrameLabel -> {\"f (THz)\", \
+\"\[Alpha] (1/cm)\"}, PlotLegends -> {\"-LogT / d\", \"Iterative solver for n \
+and k\"}]", "Input"], Cell["==Note that, in this case, we neglected the \
+Fabry\[Dash]P\[EAcute]rot term.==\n\nFor this relatively thick sample, we \
+cannot observe a significant difference. However, the difference may become \
+critical for submillimeter samples. Let's compare the real parts of the \
+refractive indices as well.", "Text"], Cell["ListLinePlot[{EstimateMaterialPa\
+rameter[\"n\", unwrapped, Quantity[0.6, \"Millimeters\"], \"Gain\" -> 1.2], \
+EstimateMaterialParameter[\"n\", unwrapped, Quantity[0.6, \"Millimeters\"], \
+Method -> \"Iterative\", \"Gain\" -> 1.2]}, PlotRange -> {{0.2, 4.}, {3.8, \
+5.2}}, Frame -> True, FrameLabel -> {\"f (THz)\", \"\[Alpha] (1/cm)\"}, \
+PlotLegends -> {\"-LogT / d\", \"Iterative solver for n and k\"}]", "Input"], 
+  Cell["### Fabry\[Dash]P\[EAcute]rot deconvolution\nFinally, to take full \
+advantage of the time-domain method, we should deconvolve the material \
+parameters from the internal reflections that produce oscillatory patterns in \
+all spectra. To enable deconvolution, simply set:", "Text"], 
+  Cell["Method -> {\"Iterative\", \"SolveFP\" -> True}", "Input"], 
+  Cell["However, this usually does not work on the first attempt. ==FP \
+deconvolution is extremely sensitive to slight inaccuracies in thickness \
+measurements or differences in aperture between the sample and reference==. \
+Therefore, we need to vary `\"Gain\"` and thickness slightly, as well as the \
+static phase shift `\"PhaseCorrection\"`. Note that `\"PhaseCorrection\"` can \
+only be $\\\\pm Z ~ 2\\\\pi$; it originates from noisy low-frequency data, \
+which can produce such phase jumps. This is essentially a multivariable \
+optimization problem.\n\nTo find the best (or true) combination, we use an \
+estimated value generated by `EstimateMaterialParameter[\"FP Reduction\"]`, \
+which is essentially the relative amplitude of the FP oscillations compared \
+with the background. Here, we find it using a grid search:", "Text"], 
+  Cell["Module[{band = Interval[{Quantity[1.5, \"Terahertz\"], Quantity[2.5, \
+\"Terahertz\"]}], temporal = {}}, Monitor[Table[temporal = Append[temporal, \
+{d, gain, EstimateMaterialParameter[\"FP Reduction\", unwrapped, Quantity[d, \
+\"Millimeters\"], \"Gain\" -> gain, \"FPInterval\" -> band]}]; \
+temporal[[-1]], {d, 0.6, 0.7, 0.0025}, {gain, 0.5, 1.6, 0.05}], \
+ListDensityPlot[temporal, PlotRange -> {{0.6, 0.7}, {0.5, 1.6}}]]]; \
+\nListContourPlot[data = Flatten[%, 1], FrameLabel -> {\"Thickness (mm)\", \
+\"Gain\"}, PlotRange -> Full]\n  \nMaximalBy[data, Last]", "Input"], 
+  Cell["The global minimum is `{0.637, 1.2}`. Let's subtract the FP \
+contribution and compare it with the previous results:", "Text"], 
+  Cell["ListLinePlot[{EstimateMaterialParameter[\"\[Alpha]\", unwrapped, \
+Quantity[0.635, \"Millimeters\"], Method -> \"Iterative\", \"Gain\" -> 1.2], \
+EstimateMaterialParameter[\"\[Alpha]\", unwrapped, Quantity[0.635, \
+\"Millimeters\"], Method -> {\"Iterative\", \"SolveFP\" -> True}, \"Gain\" -> \
+1.15]}, PlotRange -> {{0.2, 4.}, {-20, 160}}, PlotStyle -> \
+{ColorData[116][2], ColorData[116][3]}, Frame -> True, FrameLabel -> \
+{\"\[Omega] (THz)\", \"\[Alpha] (1/cm)\"}, PlotLegends -> {\"Iterative solver \
+for n and k\", \"Iterative solver for n and k + FP reduction\"}]", "Input"], 
+  Cell["We can also recover the time trace using the dedicated function \
+`DeconvolveFP`:", "Text"], Cell["FD2TD[DeconvolveFP[unwrapped, \
+Quantity[0.635, \"Millimeters\"], \"Gain\" -> 1.2]]; \nToStandardOpticsUnits \
+/@ {t, %}; \nListLinePlot[%, PlotRange -> Full, Frame -> True, FrameLabel -> \
+{\"\[Tau] (ps)\", \"t(\[Tau])\"}, PlotLegends -> {\"Original\", \"FP \
+removed\"}]", "Input"], Cell["In addition, we can filter the range of \
+interest using a **band-pass filter**.", "Text"], 
+  Cell["FD2TD[DeconvolveFP[unwrapped, Quantity[0.635, \"Millimeters\"], \
+\"Gain\" -> 1.1]]; \n(BandPassFilter[#1, Quantity[1.25, \"Terahertz\"], 2] & \
+) /@ {t, %}; \nToStandardOpticsUnits /@ %; \nListLinePlot[%, PlotRange -> \
+Full, Frame -> True, FrameLabel -> {\"\[Tau] (ps)\", \"t(\[Tau])\"}, \
+PlotLegends -> {\"Original\", \"FP removed\"}]", "Input"], 
+  Cell["This may provide additional information for further correcting the \
+gain and thickness.", "Text"], Cell["Circular basis (MCD, NCD, and others)", 
+   "Section"], Cell["Our library can transform data acquired with linearly \
+polarized light, using a special arrangement of polarizer and analyzer \
+angles, to retrieve the circular components of the light. This is helpful \
+when the eigenstates of light inside the probed medium are circularly \
+polarized (as in Faraday rotation, MCD, and other effects). In this example, \
+the data were measured at a fixed polarizer angle in two subsequent \
+measurements with $\\\\text{Analyzer} = \\\\text{Polarizer}\\\\pm \
+45^\\\\circ$.\n\nAll transformations are performed in the time domain. Here \
+is an example:", "Text"], Cell["(* LOAD YOUR DATA *)\n(* here we use example \
+data stored in the notebook *)\n{sam, ref} = ... \nsam = \
+(QuantityArray[#1, {\"Picoseconds\", 1}] & ) /@ sam; \nref = \
+(QuantityArray[#1, {\"Picoseconds\", 1}] & ) /@ ref; ", "Input"], 
+  Cell["This effectively switches the basis from linear to circular:", 
+   "Text"], Cell["sam = LinearProjectionsToCircular[Sequence @@ sam, \
+{-45*Degree, 45*Degree}]; \nref = LinearProjectionsToCircular[Sequence @@ \
+ref, {-45*Degree, 45*Degree}]; ", "Input"], Cell["`sam` and `ref` **can now \
+be treated as usual**, including for material-parameter extraction and \
+Fabry\[Dash]P\[EAcute]rot deconvolution, **provided that the original data \
+were measured using circularly polarized light**.", "Text"], 
+  Cell["t = MapThread[DeconvolveTraces[#1, #2] & , {sam, ref}]; ", "Input"], 
+  Cell["(EstimateMaterialParameter[\"\[Alpha]\", FrequencySpectrumTrim[#1], \
+Quantity[0.08, \"Millimeters\"]] & ) /@ t; \nListLinePlot[%, PlotRange -> \
+{{0.5, 3.}, {-150, 300}}, Frame -> True, PlotStyle -> {Red, Blue}, \
+PlotLegends -> {\"CW\", \"CCW\"}]", "Input"], Cell["The signal is strongly \
+affected by FP fringes. However, we can attempt to remove them and compare \
+the results.", "Text"], Cell["unwrapped = (UnwrapPhase[#1, Method -> \
+\"KKGuidedMultiscale\"] & ) /@ t; \nDeploy[With[{estimate = Function[fp, \
+ListLinePlot[MapThread[Select[ToStandardOpticsUnits[EstimateMaterialParameter\
+[\"\[Alpha]\", #1, Quantity[0.08, \"Millimeters\"], Method -> {\"Iterative\", \
+\"SolveFP\" -> fp}, \"PhaseCorrection\" -> #2, \"Gain\" -> 0.6]], \
+Function[xy, xy[[1]] >= 0.5 && xy[[1]] <= 3.2]] & , {unwrapped, {-4*Pi, 0}}], \
+FrameLabel -> {\"\[Omega] (THz)\", \"\[Alpha] (1/cm)\"}, PlotRange -> {{0.5, \
+3.}, Automatic}, Frame -> True, PlotStyle -> {Red, Blue}, PlotLegends -> \
+{\"CW\", \"CCW\"}]]}, Row[Reverse[{Labeled[estimate[True], \"After\", Top], \
+Labeled[estimate[False], \"Before\", Top]}]]]]", "Input"]}]
