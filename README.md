@@ -4,6 +4,7 @@ A small library for material parameter extraction from time-domain THz spectra, 
 
 *Developed at University of Augsburg, Germany 🇩🇪*
 
+> Hands-on notebook with several use cases is available at [https://jerryi.github.io/THzTDSTools/](https://jerryi.github.io/THzTDSTools/)
 
 ## Data format and units
 
@@ -14,7 +15,11 @@ The public processing functions use `QuantityArray` data:
 | Time trace | `{time, amplitude}` | `{"Picoseconds", 1}` |
 | One-sided frequency spectrum | `{frequency, magnitude, phase}` | `{"Terahertz", 1, 1}` |
 
-Spectrum magnitudes are nonnegative and phases are numeric radians. The phase column can store values outside `[-Pi, Pi]`, so an unwrapped phase is preserved. Frequency-dependent material results have `{frequency, value}` rows; absorption coefficient `\[Alpha]` has inverse-centimeter units. Frequencies and phases must follow the package's Fourier convention, in which a delayed pulse has positive linear phase. Thickness, time-window positions, and frequency bounds are `Quantity` values.
+Spectrum magnitudes are nonnegative. Phases are in radians and may lie outside `[-Pi, Pi]`, allowing an unwrapped phase to be stored.
+
+Frequency-dependent material results have `{frequency, value}` rows. The absorption coefficient `\[Alpha]` is in inverse centimeters.
+
+The package's Fourier convention gives a delayed pulse a positive linear phase. Thicknesses, time-window positions, and frequency bounds are `Quantity` values.
 
 ## Example workflow
 
@@ -33,37 +38,90 @@ absorption = EstimateMaterialParameter["\[Alpha]", spectrum, thickness,
 fpFreeSpectrum = DeconvolveFP[spectrum, thickness];
 ```
 
-`DeconvolveTraces` returns a time-domain transfer response. Its `TD2FD` spectrum is the regularized complex sample/reference transmission. Keep the linear phase when unwrapping if the spectrum will be inverted to time or used to estimate refractive index; `UnwrapPhase` does this by default.
+`DeconvolveTraces` returns a time-domain transfer response. Its `TD2FD` spectrum is the regularized complex sample/reference transmission.
+
+Keep the linear phase when unwrapping if you will invert the spectrum to time or use it to estimate the refractive index. `UnwrapPhase` retains it by default.
 
 ## Function reference
 
 ### Traces and Fourier transforms
 
-**`LinearProjectionsToCircular[trace1, trace2, {angle1, angle2}]`** reconstructs two circular-polarization time traces from measurements at two linear-analyzer angles. The measured projections are treated as `Cos[angle] Ex + Sin[angle] Ey`; the output is proportional to `Sqrt[2] (Ex ± Hilbert[Ey])`, preserving the earlier ±45-degree amplitude convention. Bare numbers are radians; `45 Degree` and angular `Quantity` values also work. The two angles cannot differ by a multiple of 180 degrees. Equal-length lists of traces are converted pairwise.
+**`LinearProjectionsToCircular[trace1, trace2, {angle1, angle2}]`**
 
-**`ResampleTraces[trace]`** interpolates onto a uniform time grid using the trace's smallest step. With a list of traces, it uses the smallest step across them and a common grid spanning all inputs. Values outside an input trace are zero. Output times are in picoseconds.
+Reconstructs two circular-polarization time traces from measurements at two linear-analyzer angles. It treats each measured projection as `Cos[angle] Ex + Sin[angle] Ey`.
 
-**`TD2FD[trace]`** returns a one-sided spectrum with DC and, by default, without the Nyquist bin. `"IncludeNyquist" -> True` keeps Nyquist and pads an odd-length resampled trace with one zero sample. A list of traces is processed elementwise.
+The outputs are proportional to `Sqrt[2] (Ex ± Hilbert[Ey])`. The `Sqrt[2]` factor preserves the earlier ±45-degree amplitude convention.
 
-**`FD2TD[spectrum]`** reconstructs a real, even-length trace starting at time zero. By default it interpolates onto a uniform frequency grid and assumes a zero Nyquist component. Use `"IncludeNyquist" -> True` when the spectrum contains both DC and Nyquist bins. Unwrapped phase values are accepted. A list of spectra is processed elementwise.
+Bare angles are in radians; `45 Degree` and angular `Quantity` values also work. The angles cannot differ by a multiple of 180 degrees. Equal-length lists of traces are processed pairwise.
 
-**`DeconvolveTraces[sample, reference]`** resamples both time traces to a common grid, removes their means, and returns a dimensionless lag trace. The frequency-domain transfer function is regularized by `"Threshold" -> alpha`, a positive relative power-spectrum parameter with default `10^-5`. FFT lags are circular: a negative-lag response appears near the end of the output rather than at a negative time. The intended response is causal, with the sample signal arriving no earlier than the reference.
+**`ResampleTraces[trace]`**
+
+Interpolates a trace onto a uniform time grid using its smallest step. For a list of traces, it uses the smallest step across all inputs and a common grid spanning them. Values outside an input trace are zero. Output times are in picoseconds.
+
+**`TD2FD[trace]`**
+
+Returns a one-sided spectrum with DC. By default, it omits the Nyquist bin. Set `"IncludeNyquist" -> True` to retain Nyquist; an odd-length resampled trace is then padded with one zero sample. Lists of traces are processed elementwise.
+
+**`FD2TD[spectrum]`**
+
+Reconstructs a real, even-length trace starting at time zero. It accepts unwrapped phase values and processes lists of spectra elementwise.
+
+By default, it interpolates onto a uniform frequency grid and assumes a zero Nyquist component. Set `"IncludeNyquist" -> True` when the spectrum contains both DC and Nyquist bins.
+
+**`DeconvolveTraces[sample, reference]`**
+
+Resamples both time traces to a common grid, removes their means, and returns a dimensionless lag trace. The `"Threshold"` option controls regularization of the frequency-domain transfer function; its positive relative power-spectrum value defaults to `10^-5`.
+
+FFT lags are circular. A negative-lag response appears near the end of the output rather than at a negative time. The intended response is causal, with the sample signal arriving no earlier than the reference.
 
 ### Frequency selection and filtering
 
-**`FrequencyDomainConfidenceInterval[input]`** estimates a usable band from a Gaussian fit to spectral power. It accepts a time trace, spectrum, or list of either and returns an `Interval` with inverse-centimeter endpoints. If the fit is unsuitable, it falls back to the first frequency and a frequency near the midpoint.
+**`FrequencyDomainConfidenceInterval[input]`**
 
-**`FrequencySpectrumTrim[input, interval]`** keeps only frequency bins in `interval`, whose endpoints may be in terahertz or inverse centimeters. Without `interval`, it uses `FrequencyDomainConfidenceInterval[input]`. Time input is transformed with `TD2FD` first; output is always a spectrum. Lists are processed elementwise. An interval containing no bins gives `$Failed`.
+Estimates a usable band from a Gaussian fit to spectral power. It accepts a time trace, a spectrum, or a list of either, and returns an `Interval` with inverse-centimeter endpoints.
 
-**`BandPassFilter[input, center, Q]`** applies a Gaussian filter centered at a positive frequency or wavenumber `Quantity`. The positive dimensionless quality factor `Q` defaults to 1. Its amplitude response is `Exp[-4 Log[2] ((f - center)/(center/Q))^2]`, with full width at half maximum `center/Q`. Spectrum input retains frequencies and phases. Time input returns a filtered time trace with its starting time preserved; an odd sample count may gain one padded point. Lists are processed elementwise.
+If the fit is unsuitable, it falls back to a band from the first frequency to one near the midpoint.
 
-**`ApodizeTrace[input, position, width]`** applies `HannWindow` over a full-support width centered at `position`. Both are time `Quantity` values and width must be positive. `"WindowFunction" -> window` replaces the window with a function of `(time - position)/width` on `[-1/2, 1/2]`; output is zero outside that interval. Time input keeps its grid. Spectrum input must contain DC and is converted to time, windowed, and transformed back; `position` is then relative to the reconstructed time axis starting at zero, and the output phase can be wrapped. For a spectrum containing Nyquist, set `"IncludeNyquist" -> True` (default `False`). Lists are processed elementwise.
+**`FrequencySpectrumTrim[input, interval]`**
+
+Keeps only frequency bins within `interval`. Endpoints may be in terahertz or inverse centimeters. If `interval` is omitted, the function uses `FrequencyDomainConfidenceInterval[input]`.
+
+Time input is transformed with `TD2FD` first; the output is always a spectrum. Lists are processed elementwise. An interval containing no bins gives `$Failed`.
+
+**`BandPassFilter[input, center, Q]`**
+
+Applies a Gaussian filter centered at a positive frequency or wavenumber `Quantity`. The positive, dimensionless quality factor `Q` defaults to 1. Its amplitude response is:
+
+```wl
+Exp[-4 Log[2] ((f - center)/(center/Q))^2]
+```
+
+The full width at half maximum is `center/Q`. Spectrum input retains its frequencies and phases. Time input returns a filtered trace with its starting time preserved; an odd sample count may gain one padded point. Lists are processed elementwise.
+
+**`ApodizeTrace[input, position, width]`**
+
+Applies a time window centered at `position`. Both `position` and the positive `width` are time `Quantity` values. The default window is `HannWindow`.
+
+Set `"WindowFunction" -> window` to supply a function of `(time - position)/width` on `[-1/2, 1/2]`. The output is zero outside that range.
+
+- **Time input:** Keeps the original time grid.
+- **Spectrum input:** Must contain DC. The spectrum is converted to time, windowed, and transformed back. Here `position` is relative to the reconstructed time axis starting at zero, and the output phase can be wrapped.
+
+For a spectrum containing Nyquist, set `"IncludeNyquist" -> True` (default `False`).
+
+Lists are processed elementwise.
 
 ### Phase unwrapping
 
-`TD2FD` stores the principal Fourier phase in the range from $-\pi$ to $\pi$. A sampled wrapped phase does not, by itself, tell us how many full $2\pi$ turns occur between frequency bins. The usual nearest-neighbor unwrap therefore becomes unreliable when phase changes rapidly or transmission has a deep minimum. This library offers a Kramers–Kronig (KK) guided method that uses the measured magnitude to help choose those turns.
+`TD2FD` stores the principal Fourier phase in the range from $-\pi$ to $\pi$. A sampled wrapped phase does not reveal how many full $2\pi$ turns occur between frequency bins.
 
-**`UnwrapPhase[input, interval]`** returns a complete spectrum, changing phase inside the selected band and preserving bins outside it. Omitting `interval` uses `FrequencyDomainConfidenceInterval[input]`; an explicit interval may have terahertz or inverse-centimeter endpoints. Time input is Fourier transformed first. The methods are:
+A nearest-neighbor unwrap can fail when the phase changes rapidly or transmission has a deep minimum. The Kramers–Kronig (KK) guided method uses the measured magnitude to help choose the phase branch.
+
+**`UnwrapPhase[input, interval]`**
+
+Returns a complete spectrum. It changes the phase inside the selected band while preserving the bins outside it. Time input is Fourier transformed first.
+
+Omitting `interval` uses `FrequencyDomainConfidenceInterval[input]`. An explicit interval may have terahertz or inverse-centimeter endpoints. The available methods are:
 
 | `Method` | Behavior |
 | --- | --- |
@@ -79,20 +137,30 @@ With `Method -> "KKGuided"`, the library:
 2. Computes a provisional KK phase from $\log |H(f)|$ using an even spectral extension and a Hilbert transform.
 3. For each pair of neighboring frequencies, adds the multiple of $2\pi$ to the measured phase step that makes it closest to the corresponding KK phase step:
 
-   $$\Delta\phi_i = \Delta\phi_i^{\mathrm{FT}} + 2\pi\,\operatorname{Round}\!\left(\frac{\Delta\phi_i^{\mathrm{KK}}-\Delta\phi_i^{\mathrm{FT}}}{2\pi}\right).$$
+   $$\Delta\phi_i = \Delta\phi_i^{\mathrm{FT}} + 2\pi\,\mathrm{Round}\left(\frac{\Delta\phi_i^{\mathrm{KK}}-\Delta\phi_i^{\mathrm{FT}}}{2\pi}\right).$$
 
    It accumulates these steps starting from the first measured phase. Thus the KK phase guides branch selection; it does not replace the Fourier phase.
 4. Restores the pulse-arrival phase unless `"RemoveLinearPhase" -> True` was requested.
 
-`"KKGuidedMultiscale"` adds a correction near deep transmission minima. It compares the difference between guided and KK phases on both sides of each candidate minimum at several window sizes, then applies a $2\pi$ branch shift when the comparisons agree. The KK estimate is approximate for finite-band data, so neither method guarantees a unique phase where the signal is weak or the frequency sampling is too coarse.
+`"KKGuidedMultiscale"` adds a correction near deep transmission minima. It compares the guided and KK phases on both sides of each candidate minimum at several window sizes. When those comparisons agree, it applies a $2\pi$ branch shift.
 
-`"RemoveLinearPhase" -> False` is the default and retains the pulse-arrival phase term. Setting it to `True` removes that term inside the interval, so the result no longer represents the original time delay. It has no effect with `Method -> None`. The KK-only phase is estimated from magnitude and need not invert to the original trace.
+The KK estimate is approximate for finite-band data. Neither guided method guarantees a unique phase where the signal is weak or the frequency sampling is too coarse.
+
+`"RemoveLinearPhase" -> False` is the default and retains the pulse-arrival phase term. Setting it to `True` removes that term inside the interval, so the result no longer represents the original time delay.
+
+This option has no effect with `Method -> None`. The KK-only phase is estimated from magnitude and need not invert to the original trace.
 
 ### Material properties
 
-**`AveragedRefrectiveIndex[response, thickness]`** uses the peak of the absolute time-domain response to estimate `n0 = 1 + c lag/thickness`. Spectrum input is converted with `FD2TD` first. Thickness must be a positive length `Quantity`; the estimate assumes a causal response.
+**`AveragedRefrectiveIndex[response, thickness]`**
 
-**`EstimateMaterialParameter[parameter, response, thickness]`** accepts a deconvolved time trace or a one-sided spectrum. A spectrum supplied for index estimation should already have unwrapped phase; a time trace is unwrapped internally with the Basic method and its linear phase retained. `EstimateMaterialParameter[]` lists the supported parameters:
+Uses the peak of the absolute time-domain response to estimate `n0 = 1 + c lag/thickness`. Spectrum input is converted with `FD2TD` first. Thickness must be a positive length `Quantity`; the estimate assumes a causal response.
+
+**`EstimateMaterialParameter[parameter, response, thickness]`**
+
+Accepts a deconvolved time trace or a one-sided spectrum. A spectrum supplied for index estimation should already have unwrapped phase. A time trace is unwrapped internally with the Basic method, retaining its linear phase.
+
+`EstimateMaterialParameter[]` lists the supported parameters:
 
 | Parameter | Result |
 | --- | --- |
@@ -104,9 +172,23 @@ With `Method -> "KKGuided"`, the library:
 | `"Complex n"` | `n + I \[Kappa]`. |
 | `"FP Reduction"` | Dimensionless before/after FP-suppression score. |
 
-`Method -> "Basic"` (default) makes a single-pass estimate, suitable when internal reflections are negligible. With transfer magnitude `A`, phase `phi`, thickness `L`, gain `g`, and phase correction `phiC`, the package uses `n = 1 + c (phi + phiC)/(2 Pi f L)` and `\[Kappa] = -c Log[g A]/(2 Pi f L)`. It estimates `\[Alpha] = (Log[(4 n0/(n0 + 1)^2)^2] - 2 Log[g A])/L`, including the Fresnel transmission correction based on `n0`. `T = Clip[(g A)^2, {0, 1}]`. At zero frequency, `n` and `Complex n` use `n0`, while `\[Alpha]` and `\[Kappa]` are zero. `"Gain" -> g` defaults to 1; `"PhaseCorrection" -> phiC` defaults to 0 radians.
+`Method -> "Basic"` (default) estimates the material properties in one pass. Use it when internal reflections can be neglected.
 
-`Method -> "Iterative"` runs the slab solver and needs a spectrum containing DC. The historical spelling `"Interative"` is also accepted. A method list such as `Method -> {"Iterative", "Iterations" -> 30}` can hold solver settings, or use the top-level options below.
+Let $A(f)$ and $\phi(f)$ be the magnitude and unwrapped phase of the measured transmission, $L$ the thickness, $g$ the gain correction, and $\phi_C$ the phase correction. Here $f$ is frequency and $c$ is the speed of light. For $f>0$:
+
+$$n(f)=1+\frac{c[\phi(f)+\phi_C]}{2\pi fL}$$
+
+$$\kappa(f)=-\frac{c\ln[gA(f)]}{2\pi fL}$$
+
+The absorption coefficient includes a Fresnel correction based on the peak-delay estimate $n_0$. Writing $F_0=4n_0/(n_0+1)^2$:
+
+$$\alpha(f)=\frac{2}{L}\ln\left(\frac{F_0}{gA(f)}\right)$$
+
+Power transmission is `T = Clip[(g A)^2, {0, 1}]`. At $f=0$, `n` and `Complex n` use $n_0$; `\[Alpha]` and `\[Kappa]` are set to zero. The defaults are `"Gain" -> 1` and `"PhaseCorrection" -> 0` radians.
+
+`Method -> "Iterative"` runs the slab solver and needs a spectrum containing DC. The historical spelling `"Interative"` is also accepted.
+
+Solver settings can be supplied as top-level options or in a method list such as `Method -> {"Iterative", "Iterations" -> 30}`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -116,9 +198,23 @@ With `Method -> "KKGuided"`, the library:
 | `"MovingAverage"` | `True` | Smoothing setting for the solver; also accepts a nonnegative integer. |
 | `"Target"` | `"Automatic"` | Try GPU first, then CPU fallback; `"GPU"` and `"CPU"` are also accepted. |
 
-`"FP Reduction"` always runs the iterative solver with FP removal. It compares the pre- and post-removal `f \[Kappa]` spectra near the predicted round-trip delay: above 1 means suppression, below 1 means worsening, and exactly 1 can mean no measurable reduction **or** no detectable FP peak. This is a diagnostic, not a thickness estimate; a material feature with the same periodicity can distort it. The chosen band must resolve the echo delay or the result is `$Failed`.
+`"FP Reduction"` always runs the iterative solver with FP removal. It compares the `f \[Kappa]` spectra before and after removal near the predicted round-trip delay.
 
-Set **`"FPInterval"` as a top-level option**, outside `Method`. Its default `Automatic` uses `FrequencyDomainConfidenceInterval`, `All` uses all positive bins, and an explicit frequency `Interval` restricts the score to a reliable measurement band. A fine thickness scan is useful when the suppression peak is narrow:
+| Score | Interpretation |
+| --- | --- |
+| Above 1 | FP-related structure was suppressed. |
+| Below 1 | The structure became stronger. |
+| Exactly 1 | No measurable reduction, or no detectable FP peak. |
+
+This is a diagnostic, not a thickness estimate. A material feature with the same periodicity can distort the score. If the chosen frequency band cannot resolve the echo delay, the result is `$Failed`.
+
+Set **`"FPInterval"` as a top-level option**, outside `Method`:
+
+- `Automatic` (default) uses `FrequencyDomainConfidenceInterval`.
+- `All` uses all positive-frequency bins.
+- A frequency `Interval` restricts the score to a chosen measurement band.
+
+A fine thickness scan is useful when the suppression peak is narrow:
 
 ```wl
 Table[{d, EstimateMaterialParameter["FP Reduction", spectrum,
@@ -128,15 +224,56 @@ Table[{d, EstimateMaterialParameter["FP Reduction", spectrum,
   {d, 0.62, 0.65, 0.0025}]
 ```
 
-**`DeconvolveFP[response, thickness]`** removes Fabry–Perot echoes using iterative `n` and `\[Kappa]` estimates. A time trace is Fourier transformed and phase-unwrapped internally, then returned as a time trace. A spectrum must contain DC and is assumed to have already-unwrapped phase; it returns a spectrum. Thickness is a positive length `Quantity`. Options are `"NKIterations" -> 30`, `"FPIterations" -> 8`, `"MovingAverage" -> True`, `"Target" -> "Automatic"`, `"Gain" -> 1.0`, and `"PhaseCorrection" -> 0`. Gain and phase correction are included in the output, so pass it to `EstimateMaterialParameter` with default gain and phase options.
+**`DeconvolveFP[response, thickness]`**
 
-**`GenerateMaterialResponse[n, thickness, {interval, step}]`** generates the transmission through a slab in the package's `{frequency, magnitude, phase}` `QuantityArray` format. `n` is a `Function` or a symbol defined as a function; it receives each frequency as a plain number in terahertz and returns the dimensionless complex refractive index `n + I \[Kappa]`. Thickness is a positive length `Quantity`. The interval is a frequency `Quantity` containing an `Interval`, for example `Quantity[Interval[{0, 4}], "Terahertz"]`; the positive step is another frequency `Quantity`. Terahertz and inverse centimeters are accepted for both. The grid includes the upper endpoint when it lies on a step. The generated phase retains the slab delay and can exceed `Pi`.
+Removes Fabry–Perot echoes using iterative estimates of `n` and `\[Kappa]`. Thickness must be a positive length `Quantity`.
 
-`"SolveFP" -> False` is the default and uses the single-pass slab response `H = (4 n/(n + 1)^2) Exp[I 2 Pi f L (n - 1)/c]`, with `f` in terahertz, `L` in centimeters, and `c` in centimeters per picosecond. `"SolveFP" -> True` divides this response by `1 - ((n - 1)/(n + 1))^2 Exp[I 4 Pi f L n/c]` to include internal reflections. This sign follows the positive delay phase used by `TD2FD` and the iterative material solver.
+- **Time trace:** Fourier transformed and phase-unwrapped internally; returns a time trace.
+- **Spectrum:** Must contain DC and is assumed to have already-unwrapped phase; returns a spectrum.
 
-**`GenerateMaterialResponse[n, thickness, reference]`** evaluates the same transfer function at the frequencies of `reference`. With the default `"ConvolveWithReference" -> True`, it multiplies the transfer function by the reference. A frequency spectrum returns a frequency spectrum with its existing unwrapped phase retained and the model phase added. A time trace is Fourier transformed, multiplied by the model, and returned as a time trace with the original starting time. Set `"ConvolveWithReference" -> False` to use the reference only for its sampling grid and output domain: a spectrum returns the bare transfer spectrum, while a time trace returns the impulse response starting at zero lag. The option is ignored for the `{interval, step}` form.
+| Option | Default |
+| --- | --- |
+| `"NKIterations"` | `30` |
+| `"FPIterations"` | `8` |
+| `"MovingAverage"` | `True` |
+| `"Target"` | `"Automatic"` |
+| `"Gain"` | `1.0` |
+| `"PhaseCorrection"` | `0` |
 
-Time input uses the full one-sided spectrum including Nyquist; an odd-length trace gains one padded sample. Its real inverse transform discards any imaginary DC or Nyquist component of the modeled spectrum. Convolution is circular over the finite FFT window, so allow enough time after the pulse for delayed FP echoes. The most recent reference transform is reused across repeated calls with the same `QuantityArray`.
+Gain and phase correction are included in the output. When passing that output to `EstimateMaterialParameter`, use its default gain and phase options.
+
+**`GenerateMaterialResponse[n, thickness, {interval, step}]`**
+
+Generates a slab-transmission spectrum as a `{frequency, magnitude, phase}` `QuantityArray`. The function `n` receives a plain numeric frequency in terahertz and returns the dimensionless complex refractive index `n + I \[Kappa]`. It may be a Wolfram `Function` or a symbol defined as a function.
+
+Thickness must be a positive length `Quantity`.
+
+The interval is a frequency `Quantity` containing an `Interval`, such as `Quantity[Interval[{0, 4}], "Terahertz"]`. The positive step is another frequency `Quantity`. Both accept terahertz or inverse centimeters. The grid includes the upper endpoint when it falls on a step.
+
+The generated phase retains the slab delay and can exceed `Pi`.
+
+`"SolveFP" -> False` (default) uses the single-pass response. Set it to `True` to include internal reflections. With complex index `m = n + I \[Kappa]`, the model is:
+
+```wl
+H0 = (4 m/(m + 1)^2) Exp[I 2 Pi f L (m - 1)/c]
+FP = 1/(1 - ((m - 1)/(m + 1))^2 Exp[I 4 Pi f L m/c])
+H  = H0 FP  (* when "SolveFP" -> True *)
+```
+
+Here `f` is in terahertz, `L` in centimeters, and `c` in centimeters per picosecond. The positive phase sign follows the `TD2FD` and iterative-solver convention.
+
+**`GenerateMaterialResponse[n, thickness, reference]`**
+
+Evaluates the same transfer function at the frequencies of `reference`. By default, `"ConvolveWithReference" -> True` multiplies the model by the reference:
+
+- **Spectrum reference:** Returns a spectrum. The existing unwrapped phase is retained and the model phase is added.
+- **Time-trace reference:** Fourier transforms the trace, multiplies by the model, and returns a trace with the original starting time.
+
+Set `"ConvolveWithReference" -> False` to use the reference only for its sampling grid and output domain. A spectrum then returns the bare transfer spectrum; a time trace returns the impulse response starting at zero lag. This option is ignored for the `{interval, step}` form.
+
+Time input uses the full one-sided spectrum, including Nyquist. An odd-length trace gains one padded sample. The real inverse transform discards any imaginary DC or Nyquist component of the modeled spectrum.
+
+Convolution is circular over the finite FFT window, so allow enough time after the pulse for delayed FP echoes. Repeated calls with the same `QuantityArray` reuse the most recent reference transform.
 
 ```wl
 nModel[f_] := 1.8 + 0.02 I;
@@ -150,9 +287,21 @@ simulatedTrace = GenerateMaterialResponse[nModel, thickness, referenceTrace,
 
 ### Utilities
 
-**`TimeTraceQ[input]`** returns `True` for a numeric two-column time `QuantityArray`, `False` for a numeric three-column Euler-form spectrum, and `$Failed` otherwise. The expected units are compatible with the formats shown above.
+**`TimeTraceQ[input]`**
 
-**`ToStandardOpticsUnits[input]`** removes units from supported `QuantityArray` data: time traces become numeric picosecond/amplitude rows, Euler-form spectra become terahertz/magnitude/phase rows, and two-column material spectra become terahertz/value rows. Unsupported inputs are returned unchanged. Lists are processed elementwise.
+Returns `True` for a numeric, two-column time `QuantityArray`; `False` for a numeric, three-column Euler-form spectrum; and `$Failed` otherwise. Units must be compatible with the formats above.
+
+**`ToStandardOpticsUnits[input]`**
+
+Removes units from supported `QuantityArray` data:
+
+| Input | Numeric rows returned |
+| --- | --- |
+| Time trace | `{picoseconds, amplitude}` |
+| Euler-form spectrum | `{terahertz, magnitude, phase}` |
+| Two-column material spectrum | `{terahertz, value}` |
+
+Unsupported inputs are returned unchanged. Lists are processed elementwise.
 
 ## Acknowledgments 
 The work of K.V. (@JerryI) was supported by the Deutsche
