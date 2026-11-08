@@ -5,6 +5,19 @@ A small library for material parameter extraction from time-domain THz spectra, 
 *Developed at University of Augsburg, Germany 🇩🇪*
 
 🔗 Hands-on notebook with several use cases is available at [Example.html](https://jerryi.github.io/THzTDSTools/Example.html)
+
+## GPU backends
+- [x] OpenCL
+- [ ] CUDA
+
+*Event if GPU is unavailable it will gracefully fallback to a highly optimized C-code running on your CPU. In the worst case this library will use a secondary fallback option - a cross-platform WL implementation*
+
+
+## Supported Platforms
+
+- WLJS Notebook (free)
+- Wolfram Mathematica (paid)
+- Wolfram Engine (free)
  
 ## Data format and units
 
@@ -322,11 +335,6 @@ We use these tools for processing THz data in our department Experimentalphysik 
 - Optical magnetoelectric effect in the polar honeycomb antiferromagnet Fe₂Mo₃O₈. K. V. Vasin, A. Strinić, F. Schilberth, S. Reschke, L. Prodan, V. Tsurkan, A. R. Nurmukhametov, M. V. Eremin, I. Kézsmárki, and J. Deisenhofer. Phys. Rev. B 110, 054401 – Published 1 August 2024.
 - Magnetization reversal through an antiferromagnetic state. Somnath Ghara, Evgenii Barts, Kirill Vasin, Dmytro Kamenskyi, Lilian Prodan, Vladimir Tsurkan, István Kézsmárki, Maxim Mostovoy & Joachim Deisenhofer. Nature Communications volume 14, Article number: 5174 (2023).
 
-## Supported Platforms
-
-- WLJS Notebook
-- Wolfram Mathematica
-- WolframScript (Wolfram Engine)
 
 ## License
 
