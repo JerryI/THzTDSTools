@@ -316,6 +316,11 @@ simulatedTrace = GenerateMaterialResponse[nModel, thickness, referenceTrace,
 
 ### Jones analysis
 
+```wl
+Needs["JerryI`THzTDSTools`"];
+Needs["JerryI`THzTDSTools`Jones`"];
+```
+
 **`JonesMatrix[sample, reference]`**
 
 Constructs a frequency-dependent Jones matrix from angle-labeled sample and reference traces or spectra.
