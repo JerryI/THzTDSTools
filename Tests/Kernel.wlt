@@ -213,6 +213,24 @@ VerificationTest[
 ]
 
 VerificationTest[
+    With[{
+        absorption = QuantityArray[
+            {{500., 1.}, {1000., 2.}},
+            {"Gigahertz", 1/"Millimeters"}],
+        index = QuantityArray[{{500., 1.4}}, {"Gigahertz", 1}]
+    },
+        testNearQ[
+            JerryI`THzTDSTools`ToStandardOpticsUnits[absorption],
+            {{0.5, 10.}, {1., 20.}}] &&
+        testNearQ[
+            JerryI`THzTDSTools`ToStandardOpticsUnits[index],
+            {{0.5, 1.4}}]
+    ],
+    True,
+    TestID -> "Standard units include absorption in inverse centimeters"
+]
+
+VerificationTest[
     Module[{input, bands, frequencies, output, expected},
         input = QuantityArray[
             N @ Table[{j/16, 1, 4 Pi + j/10}, {j, 0, 32}],

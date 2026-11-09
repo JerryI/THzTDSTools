@@ -394,7 +394,15 @@ Removes units from supported `QuantityArray` data:
 | --- | --- |
 | Time trace | `{picoseconds, amplitude}` |
 | Euler-form spectrum | `{terahertz, magnitude, phase}` |
-| Two-column material spectrum | `{terahertz, value}` |
+| Dimensionless material spectrum | `{terahertz, value}` |
+| Absorption-coefficient spectrum | `{terahertz, inverse centimeters}` |
+
+For example, an absorption result from `EstimateMaterialParameter` becomes numeric `{THz, cm^-1}` rows:
+
+```wl
+absorption = EstimateMaterialParameter["\[Alpha]", spectrum, thickness];
+numericAbsorption = ToStandardOpticsUnits[absorption];
+```
 
 Unsupported inputs are returned unchanged. Lists are processed elementwise.
 

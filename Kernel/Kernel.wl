@@ -32,7 +32,7 @@ TimeTraceQ::usage =
   "TimeTraceQ[input] returns True for a time trace, False for a {frequency, magnitude, phase} spectrum, and $Failed for other inputs.";
 
 ToStandardOpticsUnits::usage =
-  "ToStandardOpticsUnits[input] returns numeric data in picoseconds or terahertz from a compatible QuantityArray. Lists are processed elementwise.";
+  "ToStandardOpticsUnits[input] returns numeric time traces, spectra, or material results, including absorption in inverse centimeters. Lists are processed elementwise.";
 
 AveragedRefrectiveIndex::usage =
   "AveragedRefrectiveIndex[response, thickness] estimates the average refractive index from the response peak delay and a positive sample thickness.";
@@ -548,17 +548,16 @@ ToStandardOpticsUnits[input_QuantityArray] := Switch[TimeTraceQ[input],
     
     _,
 
-    With[{
-        v1 = Quiet @ Check[QuantityMagnitude[input, {"Terahertz", 1}], $Failed],
-        v2 = Quiet @ Check[QuantityMagnitude[input, {"Terahertz", 1/"Centimeters"}], $Failed]
-    },
+    With[{v1 = Quiet @ Check[
+        QuantityMagnitude[input, {"Terahertz", 1}], $Failed
+    ]},
         If[FailureQ[v1],
-            If[FailureQ[v2],
-                input
-            ,
-                v2
-            ]
-        ,
+            With[{v2 = Quiet @ Check[
+                QuantityMagnitude[input, {"Terahertz", 1/"Centimeters"}],
+                $Failed
+            ]},
+                If[FailureQ[v2], input, v2]
+            ],
             v1
         ]
     ]
