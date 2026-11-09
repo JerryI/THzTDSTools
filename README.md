@@ -90,13 +90,19 @@ Time input is transformed with `TD2FD` first; the output is always a spectrum. L
 
 **`BandPassFilter[input, center, Q]`**
 
-Applies a Gaussian filter centered at a positive frequency or wavenumber `Quantity`. The positive, dimensionless quality factor `Q` defaults to 1. Its amplitude response is:
+**`BandPassFilter[input, {{center1, Q1}, {center2, Q2}, ...}]`**
+
+Applies one or more Gaussian frequency bands. Each center is a positive frequency or wavenumber `Quantity`; each `Q` is positive and dimensionless. The single-center form defaults to `Q = 1`.
+
+For a band centered at `center` with quality factor `Q`, the amplitude response is:
 
 ```wl
 Exp[-4 Log[2] ((f - center)/(center/Q))^2]
 ```
 
-The full width at half maximum is `center/Q`. Spectrum input retains its frequencies and phases. Time input returns a filtered trace with its starting time preserved; an odd sample count may gain one padded point. Lists are processed elementwise.
+The full width at half maximum is `center/Q`. Multiple bands use the pointwise maximum of their responses, so overlapping bands never amplify the signal above the input amplitude.
+
+Spectrum input retains its frequencies and phases. Time input returns a filtered trace with its starting time preserved; an odd sample count may gain one padded point. Lists are processed elementwise. Both forms also support operator syntax, such as `BandPassFilter[{{center1, Q1}, {center2, Q2}}][input]`.
 
 **`ApodizeTrace[input, position, width]`**
 

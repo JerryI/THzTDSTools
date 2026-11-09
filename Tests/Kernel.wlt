@@ -196,6 +196,88 @@ VerificationTest[
 ]
 
 VerificationTest[
+    Module[{input, bands, frequencies, output, expected},
+        input = QuantityArray[
+            N @ Table[{j/16, 1, 4 Pi + j/10}, {j, 0, 32}],
+            {"Terahertz", 1, 1}];
+        bands = {{Quantity[0.5, "Terahertz"], 4},
+                 {Quantity[0.625, "Terahertz"], 4}};
+        frequencies = QuantityMagnitude[input, {"Terahertz", 1, 1}][[All, 1]];
+        output = QuantityMagnitude[
+            JerryI`THzTDSTools`BandPassFilter[input, bands],
+            {"Terahertz", 1, 1}];
+        expected = MapThread[Max, {
+            Exp[-4 Log[2] (4 (frequencies - 0.5)/0.5)^2],
+            Exp[-4 Log[2] (4 (frequencies - 0.625)/0.625)^2]
+        }];
+        testNearQ[output[[All, 2]], expected] &&
+            testNearQ[output[[All, 3]],
+                QuantityMagnitude[input, {"Terahertz", 1, 1}][[All, 3]]] &&
+            Max[output[[All, 2]]] <= 1.
+    ],
+    True,
+    TestID -> "Multiple Gaussian bands use their maximum and preserve phase"
+]
+
+VerificationTest[
+    Module[{input, center, quality, direct, grouped, operator,
+            singleOperator},
+        input = QuantityArray[
+            N @ Table[{j/16, 1, j/10}, {j, 0, 32}],
+            {"Terahertz", 1, 1}];
+        center = Quantity[30, 1/"Centimeters"];
+        quality = Quantity[2, "DimensionlessUnit"];
+        direct = JerryI`THzTDSTools`BandPassFilter[input, center, quality];
+        grouped = JerryI`THzTDSTools`BandPassFilter[input,
+            {{center, quality}}];
+        operator = JerryI`THzTDSTools`BandPassFilter[
+            {{center, quality}}][input];
+        singleOperator = JerryI`THzTDSTools`BandPassFilter[
+            center, quality][input];
+        testNearQ[
+            QuantityMagnitude[direct, {"Terahertz", 1, 1}],
+            QuantityMagnitude[grouped, {"Terahertz", 1, 1}]] &&
+        testNearQ[
+            QuantityMagnitude[operator, {"Terahertz", 1, 1}],
+            QuantityMagnitude[grouped, {"Terahertz", 1, 1}]] &&
+        testNearQ[
+            QuantityMagnitude[singleOperator, {"Terahertz", 1, 1}],
+            QuantityMagnitude[grouped, {"Terahertz", 1, 1}]]
+    ],
+    True,
+    TestID -> "Single-band and operator forms accept wavenumber centers"
+]
+
+VerificationTest[
+    Module[{input, bands, filtered, expected, actual, listed},
+        input = QuantityArray[
+            N @ Table[{2 + j/10,
+                Cos[2 Pi 7 j/128] + 0.3 Cos[2 Pi 23 j/128]},
+                {j, 0, 127}], {"Picoseconds", 1}];
+        bands = {{Quantity[0.55, "Terahertz"], 8},
+                 {Quantity[1.8, "Terahertz"], 8}};
+        filtered = JerryI`THzTDSTools`BandPassFilter[input, bands];
+        expected = JerryI`THzTDSTools`BandPassFilter[
+            JerryI`THzTDSTools`TD2FD[input, "IncludeNyquist" -> True], bands];
+        actual = JerryI`THzTDSTools`TD2FD[filtered,
+            "IncludeNyquist" -> True];
+        listed = JerryI`THzTDSTools`BandPassFilter[{input, input}, bands];
+        Dimensions[filtered] === Dimensions[input] &&
+            testNearQ[
+                QuantityMagnitude[filtered, {"Picoseconds", 1}][[All, 1]],
+                QuantityMagnitude[input, {"Picoseconds", 1}][[All, 1]]] &&
+            testNearQ[testComplexSpectrum[actual],
+                testComplexSpectrum[expected]] &&
+            Length[listed] == 2 &&
+            testNearQ[
+                QuantityMagnitude[listed[[1]], {"Picoseconds", 1}],
+                QuantityMagnitude[filtered, {"Picoseconds", 1}]]
+    ],
+    True,
+    TestID -> "Multi-band time filtering preserves its grid and maps over traces"
+]
+
+VerificationTest[
     Module[{delayed, thickness},
         delayed = QuantityArray[
             N[Table[{n/10, Boole[n == 5]}, {n, 0, 63}]],

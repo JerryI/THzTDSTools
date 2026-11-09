@@ -24,7 +24,7 @@ FrequencyDomainConfidenceInterval::usage =
 FrequencySpectrumTrim::usage =
   "FrequencySpectrumTrim[input, interval] keeps only spectrum bins inside interval. Omitting interval uses FrequencyDomainConfidenceInterval; time traces are Fourier transformed first.";
 BandPassFilter::usage =
-  "BandPassFilter[input, center, Q] applies a Gaussian frequency-domain band-pass filter with quality factor Q (default 1). Time traces, spectra, and lists are accepted.\nBandPassFilter[center, Q] is operator form";
+  "BandPassFilter[input, center, Q] applies a Gaussian band-pass filter (Q defaults to 1). BandPassFilter[input, {{center1, Q1}, ...}] combines multiple bands. Time traces, spectra, and lists are accepted; both forms have operator forms.";
 ApodizeTrace::usage =
   "ApodizeTrace[input, position, width] applies a time window centered at position. The default is HannWindow; time traces, spectra, and lists are accepted.";
 
@@ -352,64 +352,82 @@ BandPassFilter::quality = "Q must be a positive dimensionless number or Quantity
 bandPassPositiveRealQ[value_] :=
     NumericQ[value] && TrueQ[Im[N[value]] == 0] && TrueQ[value > 0];
 
-BandPassFilter[inputs:{__QuantityArray}, center_, quality_:1] :=
-    BandPassFilter[#, center, quality] & /@ inputs;
-
-BandPassFilter[center_Quantity, quality_:1][data_QuantityArray] := BandPassFilter[data, center, quality]
-    
-BandPassFilter[input_QuantityArray, center_Quantity, quality_:1] := Module[
-    {centerTHz, qValue, domain, spectrum, data, filtered, trace, traceData,
-     originalData, startPs},
-    centerTHz = If[Head[center] === Quantity,
-        Quiet @ Check[QuantityMagnitude[center, "Terahertz"], $Failed],
-        $Failed
-    ];
-    If[!bandPassPositiveRealQ[centerTHz] && Head[center] === Quantity,
-        centerTHz = Quiet @ Check[
+bandPassCenterTHz[center_Quantity] := With[
+    {frequency = Quiet @ Check[QuantityMagnitude[center, "Terahertz"], $Failed]},
+    If[bandPassPositiveRealQ[frequency], frequency,
+        Quiet @ Check[
             QuantityMagnitude[center Quantity["SpeedOfLight"], "Terahertz"],
             $Failed
         ]
-    ];
-    If[!bandPassPositiveRealQ[centerTHz],
-        Message[BandPassFilter::center];
-        Return[$Failed]
-    ];
-    qValue = If[Head[quality] === Quantity,
-        Quiet @ Check[QuantityMagnitude[quality, "DimensionlessUnit"], $Failed],
-        quality
-    ];
-    If[!bandPassPositiveRealQ[qValue],
-        Message[BandPassFilter::quality];
-        Return[$Failed]
-    ];
-    domain = TimeTraceQ[input];
-    If[domain === $Failed,
-        Message[BandPassFilter::input];
-        Return[$Failed]
-    ];
-    If[domain,
-        originalData = QuantityMagnitude[input, {"Picoseconds", 1}];
-        If[Length[originalData] < 2 ||
-           !AllTrue[originalData[[All, 2]], TrueQ[Im[#] == 0] &] ||
-           !AllTrue[Differences[originalData[[All, 1]]], TrueQ[# > 0] &],
-            Message[BandPassFilter::input];
-            Return[$Failed]
-        ];
-        startPs = originalData[[1, 1]];
-        spectrum = TD2FD[input, "IncludeNyquist" -> True],
-        spectrum = input
-    ];
-    If[spectrum === $Failed, Return[$Failed]];
-    data = QuantityMagnitude[spectrum, {"Terahertz", 1, 1}];
-    data[[All, 2]] = data[[All, 2]] *
-        Exp[-4 Log[2] (qValue (data[[All, 1]] - centerTHz)/centerTHz)^2];
-    filtered = QuantityArray[data, {"Terahertz", 1, 1}];
-    If[!domain, Return[filtered]];
-    trace = FD2TD[filtered, "IncludeNyquist" -> True];
-    If[trace === $Failed, Return[$Failed]];
-    traceData = QuantityMagnitude[trace, {"Picoseconds", 1}];
-    traceData[[All, 1]] = traceData[[All, 1]] + startPs;
-    QuantityArray[traceData, {"Picoseconds", 1}]
+    ]
+];
+
+bandPassQualityValue[quality_] := If[Head[quality] === Quantity,
+    Quiet @ Check[QuantityMagnitude[quality, "DimensionlessUnit"], $Failed],
+    quality
+];
+
+bandPassFilterSpectrum[spectrum_QuantityArray, bands_] := With[
+    {data = QuantityMagnitude[spectrum, {"Terahertz", 1, 1}]},
+    {frequencies = data[[All, 1]]},
+    {weights = MapThread[Max,
+        Exp[-4 Log[2] (#[[2]] (frequencies - #[[1]])/#[[1]])^2] & /@ bands
+    ]},
+    QuantityArray[
+        Transpose[{frequencies, data[[All, 2]] weights, data[[All, 3]]}],
+        {"Terahertz", 1, 1}
+    ]
+];
+
+BandPassFilter[inputs:{__QuantityArray}, center_Quantity, quality_:1] :=
+    BandPassFilter[#, center, quality] & /@ inputs;
+BandPassFilter[inputs:{__QuantityArray}, bands:{{_Quantity, _}..}] :=
+    BandPassFilter[#, bands] & /@ inputs;
+
+BandPassFilter[center_Quantity, quality_:1] :=
+    BandPassFilter[#, center, quality] &;
+BandPassFilter[bands:{{_Quantity, _}..}] :=
+    BandPassFilter[#, bands] &;
+
+BandPassFilter[input_QuantityArray, center_Quantity, quality_:1] :=
+    BandPassFilter[input, {{center, quality}}];
+
+BandPassFilter[input_QuantityArray, bands:{{_Quantity, _}..}] := With[
+    {converted = {bandPassCenterTHz[#[[1]]],
+                  bandPassQualityValue[#[[2]]]} & /@ bands},
+    Which[
+        !AllTrue[converted[[All, 1]], bandPassPositiveRealQ],
+            Message[BandPassFilter::center]; $Failed,
+        !AllTrue[converted[[All, 2]], bandPassPositiveRealQ],
+            Message[BandPassFilter::quality]; $Failed,
+        True,
+            Switch[TimeTraceQ[input],
+                False, bandPassFilterSpectrum[input, converted],
+                True, With[{original = QuantityMagnitude[input,
+                                  {"Picoseconds", 1}]},
+                    If[Length[original] < 2 ||
+                       !AllTrue[original[[All, 2]], TrueQ[Im[#] == 0] &] ||
+                       !AllTrue[Differences[original[[All, 1]]],
+                           TrueQ[# > 0] &],
+                        Message[BandPassFilter::input]; $Failed,
+                        With[{filtered = bandPassFilterSpectrum[
+                                  TD2FD[input, "IncludeNyquist" -> True],
+                                  converted]},
+                            {trace = FD2TD[filtered,
+                                 "IncludeNyquist" -> True]},
+                            {data = QuantityMagnitude[trace,
+                                 {"Picoseconds", 1}]},
+                            QuantityArray[
+                                Transpose[{data[[All, 1]] + original[[1, 1]],
+                                           data[[All, 2]]}],
+                                {"Picoseconds", 1}
+                            ]
+                        ]
+                    ]
+                ],
+                _, Message[BandPassFilter::input]; $Failed
+            ]
+    ]
 ];
 
 BandPassFilter[___] := (Message[BandPassFilter::input]; $Failed);
