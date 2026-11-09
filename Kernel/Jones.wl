@@ -3,10 +3,9 @@ BeginPackage["JerryI`THzTDSTools`Jones`", {
 }]
 
 JonesMatrix;
-OpticalAxisAnalysis;
-PolarizationEllipse;
-
-OpticalAxesTransmission;
+OpticalAxisAnalysis::usage = "OpticalAxisAnalysis[jones, interval] returns optical-axis properties; a JonesMatrix is averaged over its selected frequency interval.";
+PolarizationEllipse::usage = "PolarizationEllipse[jones, interval, scale] returns weighted ellipse graphics primitives for up to 500 frequencies.";
+OpticalAxesTransmission::usage = "OpticalAxesTransmission[jones, opticalAxes] returns two {frequency, magnitude, phase} spectra using an OpticalAxisAnalysis association or two Jones vectors.";
 
 Begin["`Private`"]
 
@@ -15,7 +14,10 @@ JonesMatrix[_] := (Message[JonesMatrix::malformed, "unknown pattern"]; $Failed)
 
 validTF[trace_] := !FailureQ[TimeTraceQ[trace]]
 
-roundDeg[a_] := Round[N[a], Pi/4];
+SetAttributes[roundDeg, Listable];
+roundDeg[a_] := With[{angle = Mod[Round[N[a], Pi/4], Pi]},
+    Min[angle, Pi - angle]
+];
 
 MemberListQ[ar1_, ar2_] := Length[Complement[ar1, ar2]] === 0
 
@@ -112,24 +114,80 @@ JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_In
 
 
 OpticalAxisAnalysis::nojones = "Input data must be Jones matrix"
+OpticalAxisAnalysis::interval = "The selected interval has no Jones matrices with positive total weight."
 OpticalAxisAnalysis[j:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}] := opticalAxisAnalysis[j]
 OpticalAxisAnalysis[_] := (Message[OpticalAxisAnalysis::nojones]; $Failed);
 
 OpticalAxisAnalysis[j: JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction]] := OpticalAxisAnalysis[j, Quantity[interval, units]]
 OpticalAxisAnalysis[j: JonesMatrix[f_InterpolatingFunction, units_String, _Interval, weights_InterpolatingFunction], interval_Quantity] := With[{qi = QuantityMagnitude[interval, units]}, {
-    arr = Function[x, OpticalAxisAnalysis[x[[2]]]] /@ Select[extractIData[f], (#[[1]] >= qi[[1,1]] && #[[1]] <= qi[[1,2]])&],
-    w = Select[extractIData[weights], (#[[1]] >= qi[[1,1]] && #[[2]] <= qi[[1,2]])&]
+    arr = Select[extractIData[f], qi[[1,1]] <= #[[1]] <= qi[[1,2]] &]
 },
-    (* averaged weighted result? how? *)
-    (* Return single association as if it was opticalAxisAnalysis *)
+    {w = weights /@ arr[[All, 1]]},
+    If[arr === {} || Total[w] <= 0,
+        Message[OpticalAxisAnalysis::interval]; $Failed,
+        (* Analyze the weighted matrix once: eigenvector phases and ordering
+           cannot be averaged reliably across individual frequencies. *)
+        opticalAxisAnalysis[
+            Total[MapThread[#1 #2 &, {arr[[All, 2]], w}]]/Total[w]
+        ]
+    ]
 ]
 
-(* ? how to make weighted average the result of OpticalAxisAnalysis ? *)
-(* + OpticalAxesTransmission[j_JonesMatrix, Eigenpolarizations_:Automatic - takes averaged] reutrnd basically 2x  QuantityArray {freq, 1, 1} *)
+OpticalAxesTransmission::polarizations = "Expected an OpticalAxisAnalysis association or two nonzero numeric Jones vectors."
+OpticalAxesTransmission[j_JonesMatrix, opticalAxes_Association] := With[{
+    states = Lookup[opticalAxes, "Eigenpolarizations", {}]
+},
+    If[MatchQ[states, {_Association, _Association}] &&
+       AllTrue[states, KeyExistsQ[#, "JonesVector"] &],
+        OpticalAxesTransmission[j, states[[All, "JonesVector"]]],
+        Message[OpticalAxesTransmission::polarizations]; $Failed
+    ]
+]
 
-(* + PolarizationEllipse[j_JonesMatrix, interval_Quantity:Automatic (taken from Jones), scale_:1, OptionsPattern[]] list of PolarizationEllipse[4x4] with set Opacity by weights. Total not more than 500 points *)
+OpticalAxesTransmission[j: JonesMatrix[f_InterpolatingFunction, units_String, _Interval, _InterpolatingFunction],
+                        opticalAxes:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}] := With[{
+    data = extractIData[f]
+},
+    If[AnyTrue[opticalAxes, TrueQ[Conjugate[#].# == 0] &],
+        Message[OpticalAxesTransmission::polarizations]; $Failed,
+        Function[vector,
+            With[{
+                transmission = Function[matrix,
+                    Conjugate[vector].matrix.vector/(Conjugate[vector].vector)
+                ] /@ data[[All, 2]]
+            },
+                QuantityArray[
+                    Transpose[{data[[All, 1]], Abs[transmission], Arg[transmission]}],
+                    {units, 1, 1}
+                ]
+            ]
+        ] /@ opticalAxes
+    ]
+]
 
-PolarizationEllipse[j:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}, scale_:1, OptionsPattern[]] := With[{
+PolarizationEllipse[j: JonesMatrix[f_InterpolatingFunction, units_String, default_Interval, weights_InterpolatingFunction],
+                    interval:(Automatic | _Quantity):Automatic,
+                    Optional[scale_?NumericQ, 1],
+                    opts:OptionsPattern[]] := With[{
+    qi = QuantityMagnitude[If[interval === Automatic,
+        Quantity[default, units], interval], units]
+}, {
+    arr = Select[extractIData[f], qi[[1,1]] <= #[[1]] <= qi[[1,2]] &]
+},
+    If[arr === {}, {},
+        With[{sampled = If[Length[arr] > 500,
+            arr[[Round[Subdivide[1, Length[arr], 499]]]], arr]},
+            Function[row,
+                Prepend[
+                    PolarizationEllipse[row[[2]], scale, opts],
+                    Opacity[Clip[weights[row[[1]]], {0, 1}]]
+                ]
+            ] /@ sampled
+        ]
+    ]
+]
+
+PolarizationEllipse[j:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}, Optional[scale_?NumericQ, 1], OptionsPattern[]] := With[{
     analysis = opticalAxisAnalysis[j],
     style = OptionValue[PlotStyle]
 }, {
@@ -144,8 +202,8 @@ PolarizationEllipse[j:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}, scale_:1
     ]
 },
 {
-    {colors[[1]], polarizationEllipse[analysis["Eigenpolarizations"][[1]]]},
-    {colors[[2]], polarizationEllipse[analysis["Eigenpolarizations"][[2]]]}
+    {colors[[1]], polarizationEllipse[analysis["Eigenpolarizations"][[1]], scale]},
+    {colors[[2]], polarizationEllipse[analysis["Eigenpolarizations"][[2]], scale]}
 }]
 
 Options[PolarizationEllipse] = {PlotStyle->Automatic}

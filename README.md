@@ -313,6 +313,36 @@ simulatedTrace = GenerateMaterialResponse[nModel, thickness, referenceTrace,
   "SolveFP" -> True];
 ```
 
+### Jones analysis
+
+**`OpticalAxisAnalysis[jones, interval]`**
+
+For a frequency-dependent `JonesMatrix`, averages the Jones matrices over `interval` using the stored spectral weights. It then returns the usual optical-axis analysis association.
+
+Omitting `interval` uses the interval stored in `jones`. A numeric 2×2 Jones matrix can also be analyzed directly.
+
+**`OpticalAxesTransmission[jones, opticalAxes]`**
+
+Accepts either the association returned by `OpticalAxisAnalysis[jones]` or two numeric Jones vectors. For each vector `v`, it evaluates the projected complex transmission across the full frequency grid:
+
+```wl
+Conjugate[v].J[f].v/(Conjugate[v].v)
+```
+
+The result is a list of two `{frequency, magnitude, phase}` `QuantityArray` spectra. Phases are wrapped by `Arg`.
+
+**`PolarizationEllipse[jones, interval, scale]`**
+
+Returns graphics primitives for the two polarization ellipses at each selected frequency. It uses the stored interval by default and samples at most 500 frequencies.
+
+Each frequency group's opacity comes from its spectral weight. `PlotStyle` is passed to the per-frequency ellipse drawing.
+
+```wl
+axes = OpticalAxisAnalysis[jones];
+axisSpectra = OpticalAxesTransmission[jones, axes];
+Graphics[PolarizationEllipse[jones]]
+```
+
 ### Utilities
 
 **`TimeTraceQ[input]`**
