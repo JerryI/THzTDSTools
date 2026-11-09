@@ -315,31 +315,62 @@ simulatedTrace = GenerateMaterialResponse[nModel, thickness, referenceTrace,
 
 ### Jones analysis
 
+**`JonesMatrix[sample, reference]`**
+
+Constructs a frequency-dependent Jones matrix from angle-labeled sample and reference traces or spectra.
+
+Evaluate the resulting object at a frequency `Quantity` to obtain a numeric 2×2 matrix.
+
+Evaluate it at a frequency-interval `Quantity`, such as `Quantity[Interval[{0.5, 1.5}], "Terahertz"]`, to obtain the spectral-weighted average of its sampled matrices in that interval.
+
+**`OpticalAxisAnalysis[matrix]`**
+
 **`OpticalAxisAnalysis[jones, interval]`**
 
-For a frequency-dependent `JonesMatrix`, averages the Jones matrices over `interval` using the stored spectral weights. It then returns the usual optical-axis analysis association.
+For a numeric 2×2 transmission matrix, returns an optical-axis analysis association directly. For a frequency-dependent `JonesMatrix`, first evaluates its weighted average over `interval`.
 
-Omitting `interval` uses the interval stored in `jones`. A numeric 2×2 Jones matrix can also be analyzed directly.
+Omitting `interval` uses the interval stored in `jones`.
+
+The `"LinearizedEigenvectors"` field contains two real unit vectors along the eigenpolarization ellipses' major axes. It uses their azimuths, so these ideal linear states need not be eigenvectors of the measured matrix. The azimuth becomes unstable for nearly circular states.
 
 **`OpticalAxesTransmission[jones, opticalAxes]`**
 
-Accepts either the association returned by `OpticalAxisAnalysis[jones]` or two numeric Jones vectors. For each vector `v`, it evaluates the projected complex transmission across the full frequency grid:
+Accepts the association returned by `OpticalAxisAnalysis[jones]` or two numeric Jones vectors. `"Circular"` selects the fixed pair `{1, I}` and `{1, -I}`.
+
+For each vector `v`, it evaluates the co-polarized complex transmission across the full frequency grid:
 
 ```wl
 Conjugate[v].J[f].v/(Conjugate[v].v)
 ```
 
-The result is a list of two `{frequency, magnitude, phase}` `QuantityArray` spectra. Phases are wrapped by `Arg`.
+The result is a list of two `{frequency, magnitude, phase}` `QuantityArray` spectra. The projection formula normalizes the vectors, and `Arg` wraps the phases.
+
+Cross-polarized conversion remains in the full Jones matrix.
+
+```wl
+axes = OpticalAxisAnalysis[jones];
+
+eigenSpectra = OpticalAxesTransmission[jones, axes];
+linearSpectra = OpticalAxesTransmission[
+  jones, axes["LinearizedEigenvectors"]];
+circularSpectra = OpticalAxesTransmission[jones, "Circular"];
+
+angle = 30 Degree;
+customSpectra = OpticalAxesTransmission[jones,
+  {{Cos[angle], Sin[angle]}, {-Sin[angle], Cos[angle]}}];
+```
+
+**`PolarizationEllipse[matrix, scale]`**
+
+Draws two polarization ellipses from a numeric 2×2 transmission matrix. `scale` defaults to 1, and `PlotStyle` controls their colors.
 
 **`PolarizationEllipse[jones, interval, scale]`**
 
-Returns graphics primitives for the two polarization ellipses at each selected frequency. It uses the stored interval by default and samples at most 500 frequencies.
+Returns graphics primitives for the two polarization ellipses at each selected frequency. It uses the stored interval by default and samples at most 100 frequencies.
 
 Each frequency group's opacity comes from its spectral weight. `PlotStyle` is passed to the per-frequency ellipse drawing.
 
 ```wl
-axes = OpticalAxisAnalysis[jones];
-axisSpectra = OpticalAxesTransmission[jones, axes];
 Graphics[PolarizationEllipse[jones]]
 ```
 

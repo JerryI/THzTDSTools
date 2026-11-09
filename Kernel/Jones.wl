@@ -2,14 +2,15 @@ BeginPackage["JerryI`THzTDSTools`Jones`", {
     "JerryI`THzTDSTools`"
 }]
 
-JonesMatrix;
-OpticalAxisAnalysis::usage = "OpticalAxisAnalysis[jones, interval] returns optical-axis properties; a JonesMatrix is averaged over its selected frequency interval.";
-PolarizationEllipse::usage = "PolarizationEllipse[jones, interval, scale] returns weighted ellipse graphics primitives for up to 500 frequencies.";
-OpticalAxesTransmission::usage = "OpticalAxesTransmission[jones, opticalAxes] returns two {frequency, magnitude, phase} spectra using an OpticalAxisAnalysis association or two Jones vectors.";
+JonesMatrix::usage = "JonesMatrix[sample, reference] constructs a frequency-dependent Jones matrix. A JonesMatrix object accepts a frequency Quantity for one matrix or a frequency-interval Quantity for its weighted average.";
+OpticalAxisAnalysis::usage = "OpticalAxisAnalysis[matrix] analyzes a numeric 2x2 Jones matrix. OpticalAxisAnalysis[jones, interval] analyzes its weighted average over a frequency interval.";
+PolarizationEllipse::usage = "PolarizationEllipse[matrix, scale] draws ellipses for a numeric 2x2 transmission matrix. PolarizationEllipse[jones, interval, scale] returns weighted ellipses for up to 100 frequencies.";
+OpticalAxesTransmission::usage = "OpticalAxesTransmission[jones, opticalAxes] returns two {frequency, magnitude, phase} spectra using an OpticalAxisAnalysis association, two Jones vectors, or \"Circular\".";
 
 Begin["`Private`"]
 
 JonesMatrix::malformed = "Malformed Jones matrix: ``"
+JonesMatrix::interval = "Expected a frequency interval containing sampled Jones matrices with positive total weight."
 JonesMatrix[_] := (Message[JonesMatrix::malformed, "unknown pattern"]; $Failed)
 
 validTF[trace_] := !FailureQ[TimeTraceQ[trace]]
@@ -110,30 +111,43 @@ JonesMatrix[sample:{
     ]
 ]
 
-JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction][pos_Quantity] := f[QuantityMagnitude[pos, units]]
-
-
-OpticalAxisAnalysis::nojones = "Input data must be Jones matrix"
-OpticalAxisAnalysis::interval = "The selected interval has no Jones matrices with positive total weight."
-OpticalAxisAnalysis[j:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}] := opticalAxisAnalysis[j]
-OpticalAxisAnalysis[_] := (Message[OpticalAxisAnalysis::nojones]; $Failed);
-
-OpticalAxisAnalysis[j: JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction]] := OpticalAxisAnalysis[j, Quantity[interval, units]]
-OpticalAxisAnalysis[j: JonesMatrix[f_InterpolatingFunction, units_String, _Interval, weights_InterpolatingFunction], interval_Quantity] := With[{qi = QuantityMagnitude[interval, units]}, {
-    arr = Select[extractIData[f], qi[[1,1]] <= #[[1]] <= qi[[1,2]] &]
+JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction][int:Quantity[_Interval, _]] := With[{
+    qi = Quiet @ Check[QuantityMagnitude[int, units], $Failed]
 },
-    {w = weights /@ arr[[All, 1]]},
-    If[arr === {} || Total[w] <= 0,
-        Message[OpticalAxisAnalysis::interval]; $Failed,
-        (* Analyze the weighted matrix once: eigenvector phases and ordering
-           cannot be averaged reliably across individual frequencies. *)
-        opticalAxisAnalysis[
-            Total[MapThread[#1 #2 &, {arr[[All, 2]], w}]]/Total[w]
+    If[!MatchQ[qi, Interval[{_?NumericQ, _?NumericQ}]],
+        Message[JonesMatrix::interval]; $Failed,
+        With[{
+            bounds = First[qi]
+        }, {
+            arr = Select[extractIData[f], bounds[[1]] <= #[[1]] <= bounds[[2]] &]
+        }, {
+            w = weights /@ arr[[All, 1]]
+        },
+            If[arr === {} || Total[w] <= 0,
+                Message[JonesMatrix::interval]; $Failed,
+                Total[MapThread[#1 #2 &, {arr[[All, 2]], w}]]/Total[w]
+            ]
         ]
     ]
 ]
 
-OpticalAxesTransmission::polarizations = "Expected an OpticalAxisAnalysis association or two nonzero numeric Jones vectors."
+JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction][pos_Quantity] := f[QuantityMagnitude[pos, units]]
+
+OpticalAxisAnalysis::nojones = "Input data must be Jones matrix"
+OpticalAxisAnalysis[j:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}] := opticalAxisAnalysis[j]
+OpticalAxisAnalysis[_] := (Message[OpticalAxisAnalysis::nojones]; $Failed);
+
+OpticalAxisAnalysis[j: JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction]] := OpticalAxisAnalysis[j, Quantity[interval, units]]
+OpticalAxisAnalysis[j: JonesMatrix[_InterpolatingFunction, _String, _Interval, _InterpolatingFunction], interval_Quantity] := With[{
+    matrix = j[interval]
+},
+    If[matrix === $Failed, $Failed, opticalAxisAnalysis[matrix]]
+]
+
+OpticalAxesTransmission::polarizations = "Expected an OpticalAxisAnalysis association, two nonzero numeric Jones vectors, or \"Circular\"."
+OpticalAxesTransmission[j_JonesMatrix, "Circular"] :=
+    OpticalAxesTransmission[j, {{1, I}, {1, -I}}]
+
 OpticalAxesTransmission[j_JonesMatrix, opticalAxes_Association] := With[{
     states = Lookup[opticalAxes, "Eigenpolarizations", {}]
 },
@@ -175,8 +189,8 @@ PolarizationEllipse[j: JonesMatrix[f_InterpolatingFunction, units_String, defaul
     arr = Select[extractIData[f], qi[[1,1]] <= #[[1]] <= qi[[1,2]] &]
 },
     If[arr === {}, {},
-        With[{sampled = If[Length[arr] > 500,
-            arr[[Round[Subdivide[1, Length[arr], 499]]]], arr]},
+        With[{sampled = If[Length[arr] > 100,
+            arr[[Round[Subdivide[1, Length[arr], 99]]]], arr]},
             Function[row,
                 Prepend[
                     PolarizationEllipse[row[[2]], scale, opts],
@@ -213,16 +227,15 @@ extractIData[ifun_] := Transpose[{Flatten[ifun["Grid"]], ifun["ValuesOnGrid"]}]
 
 JonesMatrix /: MakeBoxes[obj: JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction], StandardForm] := Module[{
     above, below,
-    t = extractIData[f],
-    w = extractIData[weights]
+    report = OpticalAxisAnalysis[obj]
 },
     above = { 
-      {BoxForm`SummaryItem[{"Meow: ", "Boo"}]}
+      {BoxForm`SummaryItem[{"Degeneracy: ", report["Degeneracy"]}]}
     };
     BoxForm`ArrangeSummaryBox[
        JonesMatrix, (* head *)
        obj,      (* interpretation *)
-       ComplexArrayPlot[Sum[t[[i,2]] w[[i,2]], {i, Length[t]}], ImageSize->50, ColorFunctionScaling->True, ImagePadding->None, PlotRange->{{-2,2},{-2,2}}, Background->Transparent, Frame->False, Axes->False],
+       Graphics[PolarizationEllipse[obj], AspectRatio->1],
        (* above and below must be in a format suitable for Grid or Column *)
        above,    (* always shown content *)
        Null (* expandable content. Currently not supported!*)
@@ -281,8 +294,9 @@ opticalAxisAnalysis[jones_] := Module[{eigenvalues, eigenvectors, eigenstates, u
     separation = Abs[eigenstates[[1]]["AzimuthDeg"] - eigenstates[[2]]["AzimuthDeg"]];
     separation = Min[separation, 180 - separation];
     Association[
-        "Eigenvalues" -> eigenvalues
-        ,
+        "Eigenvalues" -> eigenvalues,
+        "Eigenvectors" -> eigenstates[[All, "JonesVector"]],
+        "LinearizedEigenvectors" -> ({Cos[#["AzimuthRad"]], Sin[#["AzimuthRad"]]} & /@ eigenstates),
         "Eigenpolarizations" -> eigenstates
         ,
         "EigenaxisSeparationDeg" -> separation

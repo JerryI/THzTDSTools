@@ -43,14 +43,42 @@ VerificationTest[
 
 VerificationTest[
     With[{
+        analysis = JerryI`THzTDSTools`Jones`OpticalAxisAnalysis[
+            {{2., 0.}, {0., 1.}}],
+        ellipses = JerryI`THzTDSTools`Jones`PolarizationEllipse[
+            {{2., 0.}, {0., 1.}}, 2, PlotStyle -> {Green, Orange}]
+    },
+        AssociationQ[analysis] &&
+        jonesNearQ[Sort[analysis["Eigenvalues"]], {1., 2.}] &&
+        Length[ellipses] == 2 &&
+        ellipses[[1, 1]] === Green &&
+        ellipses[[2, 1]] === Orange
+    ],
+    True,
+    TestID -> "Direct 2x2 matrices support axis analysis and ellipse drawing"
+]
+
+VerificationTest[
+    With[{
         analysis = JerryI`THzTDSTools`Jones`OpticalAxisAnalysis[testJones],
         narrow = JerryI`THzTDSTools`Jones`OpticalAxisAnalysis[
             testJones, Quantity[Interval[{0.2, 0.4}], "Terahertz"]],
+        averaged = testJones[
+            Quantity[Interval[{0.2, 0.8}], "Terahertz"]],
+        narrowAverage = testJones[
+            Quantity[Interval[{0.2, 0.4}], "Terahertz"]],
+        point = testJones[Quantity[0.5, "Terahertz"]],
         f = N[Range[2, 8]/10],
         fNarrow = N[Range[2, 4]/10]
     },
         AssociationQ[analysis] &&
         KeyExistsQ[analysis, "Eigenpolarizations"] &&
+        jonesNearQ[averaged[[1, 1]],
+            2 + Total[f (0.2 + 0.5 f)]/Total[0.2 + 0.5 f]] &&
+        jonesNearQ[narrowAverage[[1, 1]],
+            2 + Total[fNarrow (0.2 + 0.5 fNarrow)]/
+                Total[0.2 + 0.5 fNarrow]] &&
+        jonesNearQ[point, {{2.5, 0.}, {0., 1.}}] &&
         jonesNearQ[Sort[analysis["Eigenvalues"]],
             {1., 2 + Total[f (0.2 + 0.5 f)]/Total[0.2 + 0.5 f]}] &&
         jonesNearQ[Sort[narrow["Eigenvalues"]],
@@ -136,9 +164,9 @@ VerificationTest[
             styled[[1, 2, 1]] === Red &&
             styled[[1, 3, 1]] === Red &&
             jonesNearQ[scaledRadius, 2 baseRadius] &&
-            Length[ellipses] == 500 &&
+            Length[ellipses] == 100 &&
             Length[Cases[ellipses, _Opacity, Infinity]] == Length[ellipses]
     ],
     True,
-    TestID -> "Jones ellipses use weights and at most 500 frequencies"
+    TestID -> "Jones ellipses use weights and at most 100 frequencies"
 ]
