@@ -15,6 +15,7 @@ A small library for material parameter extraction from time-domain THz spectra, 
 - advanced 1D phase unwrapping guided by the Kramers–Kronig relation;
 - optical-response modeling for thin and thick slabs;
 - band-pass filtering and apodization of time traces;
+- Jones matrix framework and Stokes light field analysis.
 
 All functions are strongly typed but also support multiple input patterns: time-domain data is automatically converted to the frequency domain if needed. Iterative solvers are implemented in OpenCL, with C functions running on the CPU as a fallback and a WL implementation serving as a secondary fallback if the C version fails to load.
 
