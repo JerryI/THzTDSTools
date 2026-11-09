@@ -100,7 +100,7 @@ FFT lags are circular. A negative-lag response appears near the end of the outpu
 
 **`FrequencyDomainConfidenceInterval[input]`**
 
-Estimates a usable band from a Gaussian fit to spectral power. It accepts a time trace, a spectrum, or a list of either, and returns an `Interval` with inverse-centimeter endpoints.
+Estimates a usable band from a Gaussian fit to spectral power. It accepts a time trace, a spectrum, or a list of either, and returns a frequency `Quantity` containing an `Interval` in terahertz.
 
 If the fit is unsuitable, it falls back to a band from the first frequency to one near the midpoint.
 

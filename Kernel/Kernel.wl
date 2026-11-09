@@ -19,7 +19,7 @@ DeconvolveFP::usage =
   "DeconvolveFP[response, thickness] removes Fabry-Perot echoes using the iterative slab solver. It returns the same domain as the input: time trace or {frequency, magnitude, phase} spectrum.";
 
 FrequencyDomainConfidenceInterval::usage =
-  "FrequencyDomainConfidenceInterval[input] estimates a usable frequency Interval from a time trace or spectrum. It returns inverse-centimeter endpoints; lists are processed elementwise.";
+  "FrequencyDomainConfidenceInterval[input] estimates a usable frequency Interval in terahertz from a time trace or spectrum. Lists are processed elementwise.";
 
 FrequencySpectrumTrim::usage =
   "FrequencySpectrumTrim[input, interval] keeps only spectrum bins inside interval. Omitting interval uses FrequencyDomainConfidenceInterval; time traces are Fourier transformed first.";
@@ -281,8 +281,8 @@ frequencyDomainConfidenceInterval[spectrum_] := Module[
     {}
   ];
 
-  Interval[UnitConvert[Quantity[#, "Terahertz"]/Quantity["SpeedOfLight"],
-    1/"Centimeters"] & /@ If[Length[selected] >= 2, candidates, fallback]]
+  Quantity[Interval[If[Length[selected] >= 2, candidates, fallback]],
+    "Terahertz"]
 ]
 
 FrequencySpectrumTrim::units = "Expected a two-column time trace or a three-column {frequency, magnitude, phase} QuantityArray.";
@@ -1531,5 +1531,7 @@ GenerateMaterialResponse[indexFunction:(_Function | _Symbol), thickness_Quantity
 ];
 
 GenerateMaterialResponse[___] := (Message[GenerateMaterialResponse::input]; $Failed);
+
+
 End[]
 EndPackage[]

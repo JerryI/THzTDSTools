@@ -15,7 +15,8 @@ PacletObject[
         "Root" -> "Kernel",
         "Context" -> {
           {"JerryI`THzTDSTools`Common`", "Common.wl"},
-          {"JerryI`THzTDSTools`", "Kernel.wl"}
+          {"JerryI`THzTDSTools`", "Kernel.wl"},
+          {"JerryI`THzTDSTools`Jones`", "Jones.wl"}
         },
         "Symbols" -> {}
       },

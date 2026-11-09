@@ -158,6 +158,23 @@ VerificationTest[
 ]
 
 VerificationTest[
+    With[{
+        interval = JerryI`THzTDSTools`FrequencyDomainConfidenceInterval[
+            testGaussianSpectrum],
+        trimmed = JerryI`THzTDSTools`FrequencySpectrumTrim[
+            testGaussianSpectrum]
+    },
+        QuantityUnit[interval] === "Terahertz" &&
+        MatchQ[QuantityMagnitude[interval, "Terahertz"],
+            Interval[{_?NumericQ, _?NumericQ}]] &&
+        MatchQ[trimmed, _QuantityArray] &&
+        Dimensions[trimmed][[2]] == 3 && Length[trimmed] > 0
+    ],
+    True,
+    TestID -> "Confidence interval defaults to THz and default trimming accepts it"
+]
+
+VerificationTest[
     Module[{trimmed, expected},
         trimmed = QuantityMagnitude[
             JerryI`THzTDSTools`FrequencySpectrumTrim[testUnwrappedSpectrum,
