@@ -4,7 +4,29 @@ A small library for material parameter extraction from time-domain THz spectra, 
 
 *Developed at University of Augsburg, Germany 🇩🇪*
 
-> Hands-on notebook with several use cases is available at [https://jerryi.github.io/THzTDSTools/](https://jerryi.github.io/THzTDSTools/)
+🔗 Hands-on notebook with several use cases is available at [Example.html](https://jerryi.github.io/THzTDSTools/Example.html)
+
+*THzTDSTools* is designed mainly for processing __time-domain data in transmission optics__. It includes:
+
+- signal (kernel) deconvolution;
+- seamless conversion between the time and frequency domains;
+- projections from linear to circular bases;
+- extraction of material parameters (absorption, refractive index, etc.), __including multiple-beam propagation and Fresnel losses__;
+- advanced 1D phase unwrapping guided by the Kramers–Kronig relation;
+- optical-response modeling for thin and thick slabs;
+- band-pass filtering and apodization of time traces;
+
+All functions are strongly typed but also support multiple input patterns: time-domain data is automatically converted to the frequency domain if needed. Iterative solvers are implemented in OpenCL, with C functions running on the CPU as a fallback and a WL implementation serving as a secondary fallback if the C version fails to load.
+
+## GPU backends
+- [x] OpenCL
+- [ ] CUDA
+
+## Supported Platforms
+
+- WLJS Notebook (free)
+- Wolfram Mathematica (paid)
+- Wolfram Engine (free)
  
 ## Data format and units
 
@@ -328,11 +350,6 @@ We use these tools for processing THz data in our department Experimentalphysik 
 - Optical magnetoelectric effect in the polar honeycomb antiferromagnet Fe₂Mo₃O₈. K. V. Vasin, A. Strinić, F. Schilberth, S. Reschke, L. Prodan, V. Tsurkan, A. R. Nurmukhametov, M. V. Eremin, I. Kézsmárki, and J. Deisenhofer. Phys. Rev. B 110, 054401 – Published 1 August 2024.
 - Magnetization reversal through an antiferromagnetic state. Somnath Ghara, Evgenii Barts, Kirill Vasin, Dmytro Kamenskyi, Lilian Prodan, Vladimir Tsurkan, István Kézsmárki, Maxim Mostovoy & Joachim Deisenhofer. Nature Communications volume 14, Article number: 5174 (2023).
 
-## Supported Platforms
-
-- WLJS Notebook
-- Wolfram Mathematica
-- WolframScript (Wolfram Engine)
 
 ## License
 
