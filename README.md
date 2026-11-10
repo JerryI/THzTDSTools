@@ -6,6 +6,8 @@ A small library for material parameter extraction from time-domain THz spectra, 
 
 🔗 Hands-on notebook with several use cases is available at [Example.html](https://jerryi.github.io/THzTDSTools/Example.html)
 
+🔗 Jones matrix tutorial is available at [Example.html](https://jerryi.github.io/THzTDSTools/Jones.html)
+
 *THzTDSTools* is designed mainly for processing __time-domain data in transmission optics__. It includes:
 
 - signal (kernel) deconvolution;
@@ -76,6 +78,8 @@ Reconstructs two circular-polarization time traces from measurements at two line
 The outputs are proportional to `Sqrt[2] (Ex ± Hilbert[Ey])`. The `Sqrt[2]` factor preserves the earlier ±45-degree amplitude convention.
 
 Bare angles are in radians; `45 Degree` and angular `Quantity` values also work. The angles cannot differ by a multiple of 180 degrees. Equal-length lists of traces are processed pairwise.
+
+> **Note:** This function only changes the basis of two measured linear projections. For a general polarization response—including cross-polarized components and sample/reference calibration—construct a `JonesMatrix` from the four required polarizer-analyzer configurations; see [Jones analysis](#jones-analysis).
 
 **`ResampleTraces[trace]`**
 
@@ -323,11 +327,58 @@ Needs["JerryI`THzTDSTools`Jones`"];
 
 **`JonesMatrix[sample, reference]`**
 
-Constructs a frequency-dependent Jones matrix from angle-labeled sample and reference traces or spectra.
+Constructs a calibrated, frequency-dependent Jones matrix from angle-labeled sample and reference measurements. Each argument must contain the same four polarizer-analyzer configurations:
+
+```wl
+sample = {
+  {0 Degree, 0 Degree} -> sample00,
+  {90 Degree, 90 Degree} -> sample9090,
+  {45 Degree, 0 Degree} -> sample450,
+  {45 Degree, 90 Degree} -> sample4590
+};
+
+reference = {
+  {0 Degree, 0 Degree} -> reference00,
+  {90 Degree, 90 Degree} -> reference9090,
+  {45 Degree, 0 Degree} -> reference450,
+  {45 Degree, 90 Degree} -> reference4590
+};
+
+jones = JonesMatrix[sample, reference];
+```
+
+In an angle pair `{analyzer, inputPolarizer}`, the first angle belongs to the analyzer and the second to the input polarizer. Each value may be a time trace or a one-sided frequency spectrum in the standard `QuantityArray` format. Time traces are resampled and transformed to the frequency domain automatically.
+
+At each sampled frequency, let $M_{a,b}$ be the complex field measured at analyzer angle $a$ and input-polarizer angle $b$. The four measurements reconstruct the system transfer matrix:
+
+$$
+T=\begin{pmatrix}
+M_{0,0} & \sqrt{2}M_{45,90}-M_{90,90}\\
+\sqrt{2}M_{45,0}-M_{0,0} & M_{90,90}
+\end{pmatrix}.
+$$
+
+The sample Jones matrix is calibrated from the left:
+
+$$
+J_{\mathrm{sample}}=T_{\mathrm{reference}}^{-1}T_{\mathrm{sample}}.
+$$
+
+The implementation evaluates this with `LinearSolve[Treference, Tsample]` instead of explicitly forming the inverse. Matrix order matters because Jones matrices generally do not commute.
 
 Evaluate the resulting object at a frequency `Quantity` to obtain a numeric 2×2 matrix.
 
 Evaluate it at a frequency-interval `Quantity`, such as `Quantity[Interval[{0.5, 1.5}], "Terahertz"]`, to obtain the spectral-weighted average of its sampled matrices in that interval.
+
+```wl
+(* Inspect the calibrated matrix at one frequency. *)
+matrix = jones[Quantity[1.25, "Terahertz"]];
+matrix // MatrixForm
+
+(* Average over a useful spectral band. *)
+band = Quantity[Interval[{1.15, 1.5}], "Terahertz"];
+averageMatrix = jones[band];
+```
 
 **`OpticalAxisAnalysis[matrix]`**
 
@@ -338,6 +389,19 @@ For a numeric 2×2 transmission matrix, returns an optical-axis analysis associa
 Omitting `interval` uses the interval stored in `jones`.
 
 The `"LinearizedEigenvectors"` field contains two real unit vectors along the eigenpolarization ellipses' major axes. It uses their azimuths, so these ideal linear states need not be eigenvectors of the measured matrix. The azimuth becomes unstable for nearly circular states.
+
+For example, inspect the eigenpolarizations at one frequency and then obtain a more robust, band-averaged estimate of the linear optical axes:
+
+```wl
+analysis = OpticalAxisAnalysis[
+  jones[Quantity[1.25, "Terahertz"]]
+];
+analysis[["Eigenpolarizations", All,
+  {"JonesVector", "AzimuthDeg"}]] // TableView
+
+bandAnalysis = OpticalAxisAnalysis[jones, band];
+basis = bandAnalysis["LinearizedEigenvectors"];
+```
 
 **`OpticalAxesTransmission[jones, opticalAxes]`**
 
@@ -366,6 +430,31 @@ customSpectra = OpticalAxesTransmission[jones,
   {{Cos[angle], Sin[angle]}, {-Sin[angle], Cos[angle]}}];
 ```
 
+The linearized axes are useful for a weakly misaligned linearly birefringent sample. Project the full Jones matrix onto them to recover the two co-polarized eigenmode spectra:
+
+```wl
+eigenSpectra = OpticalAxesTransmission[jones, basis];
+
+ListLinePlot[
+  (FrequencySpectrumTrim /@ eigenSpectra)[[All, All, {1, 2}]],
+  PlotRange -> {{0.25, 1.55}, {0, 1}},
+  Frame -> True,
+  FrameLabel -> {"frequency (THz)", "transmission"},
+  PlotLegends -> {"Polarization 1", "Polarization 2"}
+]
+
+timeTraces = FD2TD /@ eigenSpectra;
+filteredTraces =
+  BandPassFilter[#, Quantity[0.7, "Terahertz"], 2.5] & /@ timeTraces;
+
+ListLinePlot[filteredTraces[[All, ;; 600]],
+  PlotRange -> Full,
+  Frame -> True,
+  FrameLabel -> {"time (ps)", "amplitude"},
+  PlotLegends -> {"Polarization 1", "Polarization 2"}
+]
+```
+
 **`PolarizationEllipse[matrix, scale]`**
 
 Draws two polarization ellipses from a numeric 2×2 transmission matrix. `scale` defaults to 1, and `PlotStyle` controls their colors.
@@ -377,7 +466,15 @@ Returns graphics primitives for the two polarization ellipses at each selected f
 Each frequency group's opacity comes from its spectral weight. `PlotStyle` is passed to the per-frequency ellipse drawing.
 
 ```wl
-Graphics[PolarizationEllipse[jones]]
+Graphics[
+  PolarizationEllipse[jones[Quantity[1.25, "Terahertz"]]],
+  PlotRange -> 1.2,
+  AspectRatio -> 1,
+  Axes -> True
+]
+
+(* Overlay frequency-dependent ellipses across the stored confidence band. *)
+Graphics[PolarizationEllipse[jones], PlotRange -> 1.2]
 ```
 
 ### Utilities

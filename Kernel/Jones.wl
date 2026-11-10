@@ -182,24 +182,37 @@ OpticalAxesTransmission[j: JonesMatrix[f_InterpolatingFunction, units_String, _I
 PolarizationEllipse[j: JonesMatrix[f_InterpolatingFunction, units_String, default_Interval, weights_InterpolatingFunction],
                     interval:(Automatic | _Quantity):Automatic,
                     Optional[scale_?NumericQ, 1],
-                    opts:OptionsPattern[]] := With[{
+                    opts:OptionsPattern[]] := With[{samples = BlockRandom[RandomSeed[123]; RandomReal[default[[1]], 15]]}, With[{
     qi = QuantityMagnitude[If[interval === Automatic,
         Quantity[default, units], interval], units]
 }, {
     arr = Select[extractIData[f], qi[[1,1]] <= #[[1]] <= qi[[1,2]] &]
 },
-    If[arr === {}, {},
+    If[interval === Automatic,
+        With[{
+            sampledWeights = Map[weights, samples]
+        },
+         MapThread[Function[{e,w}, {Opacity[w], e}], 
+          Transpose@SortBy[Transpose[{
+            PolarizationEllipse/@Map[f, samples], 
+            Sqrt[sampledWeights/Max[sampledWeights]]
+          }], Last]]
+        ]
+    ,
+     If[arr === {}, {},
         With[{sampled = If[Length[arr] > 100,
             arr[[Round[Subdivide[1, Length[arr], 99]]]], arr]},
-            Function[row,
-                Prepend[
+            
+            SortBy[Function[row,
+                {   
                     PolarizationEllipse[row[[2]], scale, opts],
                     Opacity[Clip[weights[row[[1]]], {0, 1}]]
-                ]
-            ] /@ sampled
+                }
+            ] /@ sampled, Function[k, k[[2,1]] ]]
         ]
+     ]
     ]
-]
+] ]
 
 PolarizationEllipse[j:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}, Optional[scale_?NumericQ, 1], OptionsPattern[]] := With[{
     analysis = opticalAxisAnalysis[j],
@@ -225,22 +238,29 @@ Options[PolarizationEllipse] = {PlotStyle->Automatic}
 extractIData[ifun_] := Transpose[{Flatten[ifun["Grid"]], ifun["ValuesOnGrid"]}]
 
 
-JonesMatrix /: MakeBoxes[obj: JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction], StandardForm] := Module[{
+JonesMatrix /: MakeBoxes[obj: JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_InterpolatingFunction], StandardForm] := With[{samples = BlockRandom[RandomSeed[123]; RandomReal[interval[[1]], 15]]}, Module[{
     above, below,
-    report = OpticalAxisAnalysis[obj]
+    report = OpticalAxisAnalysis[obj],
+    sampledReports = OpticalAxisAnalysis /@ Map[f, samples],
+    sampledWeights = Map[weights, samples]
 },
     above = { 
-      {BoxForm`SummaryItem[{"Degeneracy: ", report["Degeneracy"]}]}
+      {BoxForm`SummaryItem[{"Averaged degeneracy: ", NumberForm[report["Degeneracy"], {3,2}]}]},
+      {BoxForm`SummaryItem[{"MinMax degeneracy: ", NumberForm[#, {3,2}]&/@MinMax[sampledReports[[All, "Degeneracy"]]]}]}
     };
     BoxForm`ArrangeSummaryBox[
        JonesMatrix, (* head *)
        obj,      (* interpretation *)
-       Graphics[PolarizationEllipse[obj], AspectRatio->1],
+       Graphics[MapThread[Function[{e,w}, {Opacity[w], e}], 
+         Transpose@SortBy[Transpose[{
+           PolarizationEllipse/@Map[f, samples], 
+           Sqrt[sampledWeights/Max[sampledWeights]]
+         }], Last]], AspectRatio->1, PlotRange->1.25, Prolog->{Black, Line[{{-10,0}, {10,0}}], Line[{{0,-10}, {0,10}}]}],
        (* above and below must be in a format suitable for Grid or Column *)
        above,    (* always shown content *)
        Null (* expandable content. Currently not supported!*)
     ]
-];
+]];
 
 jonesMatrix[
   MM45_, RM45_, RP45_, M90_, R90_, MP45_, M0_, R0_
@@ -287,9 +307,15 @@ jonesPolarization[vector_] := Module[{
     ]
 ];
 
-opticalAxisAnalysis[jones_] := Module[{eigenvalues, eigenvectors, eigenstates, u, w, v, separation},
+opticalAxisAnalysis[jones_] := Module[{eigenvalues, eigenvectors, eigenstates, order, u, w, v, separation},
     {eigenvalues, eigenvectors} = Eigensystem[jones];
     eigenstates = jonesPolarization /@ eigenvectors;
+    order = Ordering[
+        Abs[Arg[Exp[2 I eigenstates[[All, "AzimuthRad"]]]]]/2
+    ];
+    eigenvalues = eigenvalues[[order]];
+    eigenvectors = eigenvectors[[order]];
+    eigenstates = eigenstates[[order]];
     {u, w, v} = SingularValueDecomposition[jones];
     separation = Abs[eigenstates[[1]]["AzimuthDeg"] - eigenstates[[2]]["AzimuthDeg"]];
     separation = Min[separation, 180 - separation];
@@ -329,8 +355,8 @@ eigenvalueColorData[axisAnalysis_Association] := Module[
     {0, 1}
   ];
   degeneracy = 1 - separation;
-  firstColor = Blend[{Red, RGBColor[1,0.5,1]}, degeneracy];
-  secondColor = Blend[{Blue, RGBColor[1,0.5,1]}, degeneracy];
+  firstColor = Blend[{StandardRed, White}, degeneracy degeneracy];
+  secondColor = Blend[{StandardBlue, White}, degeneracy degeneracy];
   {firstColor, secondColor}
 ]
 

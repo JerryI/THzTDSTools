@@ -37,6 +37,7 @@ jobs:
           mkdir -p _site
           cp Example.html _site/index.html
           cp Example.html _site/Example.html
+          cp Jones.html _site/Jones.html
           touch _site/.nojekyll
 
       - name: Upload Pages artifact
