@@ -79,7 +79,7 @@ The outputs are proportional to `Sqrt[2] (Ex ± Hilbert[Ey])`. The `Sqrt[2]` fac
 
 Bare angles are in radians; `45 Degree` and angular `Quantity` values also work. The angles cannot differ by a multiple of 180 degrees. Equal-length lists of traces are processed pairwise.
 
-> **Note:** This function only changes the basis of two measured linear projections. For a general polarization response—including cross-polarized components and sample/reference calibration—construct a `JonesMatrix` from the four required polarizer-analyzer configurations; see [Jones analysis](#jones-analysis).
+> **Note:** This function only changes the basis of two measured linear projections. For a general polarization response — including cross-polarized components and sample/reference calibration — construct a `JonesMatrix` from the four required polarizer-analyzer configurations; see [Jones analysis](#jones-analysis).
 
 **`ResampleTraces[trace]`**
 
