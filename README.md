@@ -76,7 +76,7 @@ Keep the linear phase when unwrapping if you will invert the spectrum to time or
 Reconstructs two circular-polarization time traces from measurements at two linear-analyzer angles. It treats each measured projection as `Cos[angle] Ex + Sin[angle] Ey`.
 
 The outputs are proportional to `Sqrt[2] (Ex ± Hilbert[Ey])`. The `Sqrt[2]` factor preserves the earlier ±45-degree amplitude convention.
-
+ 
 Bare angles are in radians; `45 Degree` and angular `Quantity` values also work. The angles cannot differ by a multiple of 180 degrees. Equal-length lists of traces are processed pairwise.
 
 > **Note:** This function only changes the basis of two measured linear projections. For a general polarization response — including cross-polarized components and sample/reference calibration — construct a `JonesMatrix` from the four required polarizer-analyzer configurations; see [Jones analysis](#jones-analysis).
