@@ -636,7 +636,7 @@ AveragedRefrectiveIndex::input = "Expected a two-column time trace or a three-co
 AveragedRefrectiveIndex::zeroSignal = "The response has no peak from which to estimate a delay.";
 
 AveragedRefrectiveIndex[input_QuantityArray, thickness_Quantity] := Module[
-    {thicknessMeters, domain, trace, data, peak, lag},
+    {thicknessMeters, domain, trace, data, smooth, samples, peak, lag},
     thicknessMeters = Quiet @ Check[QuantityMagnitude[thickness, "Meters"], $Failed];
     domain = TimeTraceQ[input];
     If[!NumericQ[thicknessMeters] || !TrueQ[thicknessMeters > 0] || domain === $Failed,
@@ -650,7 +650,9 @@ AveragedRefrectiveIndex[input_QuantityArray, thickness_Quantity] := Module[
         Message[AveragedRefrectiveIndex::zeroSignal];
         Return[$Failed]
     ];
-    peak = First[Ordering[Abs[data[[All, 2]]], -1]];
+    smooth = !domain && Length[data] >= 3;
+    samples = If[smooth, MovingAverage[data[[All, 2]], 3], data[[All, 2]]];
+    peak = First[Ordering[Abs[samples], -1]] + Boole[smooth];
     lag = data[[peak, 1]] - data[[1, 1]];
     1 + QuantityMagnitude[Quantity[lag, "Picoseconds"] Quantity["SpeedOfLight"]/thickness]
 ];

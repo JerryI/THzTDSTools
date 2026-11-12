@@ -333,6 +333,23 @@ VerificationTest[
 ]
 
 VerificationTest[
+    With[{
+        trace = QuantityArray[
+            N[Table[{n/10, Exp[-(n - 20)^2/8] + 2 Boole[n == 0]},
+                {n, 0, 63}]], {"Picoseconds", 1}]
+    },
+        testNearQ[
+            JerryI`THzTDSTools`AveragedRefrectiveIndex[
+                JerryI`THzTDSTools`TD2FD[trace],
+                Quantity[1, "Millimeters"]],
+            1 + 0.299792458 2
+        ]
+    ],
+    True,
+    TestID -> "Average index ignores isolated inverse-spectrum spikes"
+]
+
+VerificationTest[
     Module[{reference, sample, transfer, refSpectrum, samSpectrum, expected},
         reference = QuantityArray[
             N[Table[{n/10, Boole[n == 10]}, {n, 0, 63}]],

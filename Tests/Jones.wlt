@@ -90,6 +90,36 @@ VerificationTest[
 ]
 
 VerificationTest[
+    With[{
+        frequencies = N[Range[0, 100]/100],
+        matrix = {{1., 0.4}, {0.2, -1.}}
+    },
+        With[{
+            jones = JerryI`THzTDSTools`Jones`JonesMatrix[
+                Interpolation[
+                    Table[{f, Exp[2 Pi I 9.3 f] matrix}, {f, frequencies}],
+                    InterpolationOrder -> 0
+                ],
+                "Terahertz", Interval[{0., 1.}],
+                Interpolation[Table[{f, 1.}, {f, frequencies}],
+                    InterpolationOrder -> 0]
+            ]
+        },
+            With[{
+                average = jones[Quantity[Interval[{0., 1.}], "Terahertz"]]
+            },
+                jonesNearQ[
+                    average/(average[[1, 1]]/Abs[average[[1, 1]]]),
+                    matrix, 10^-8
+                ]
+            ]
+        ]
+    ],
+    True,
+    TestID -> "Interval average removes common phase even when matrix trace vanishes"
+]
+
+VerificationTest[
     Module[{matrixFunction, jones, spectra, axes, associated,
             complexAxes, complexData, data},
         matrixFunction = Interpolation[
@@ -159,14 +189,37 @@ VerificationTest[
         ellipses = JerryI`THzTDSTools`Jones`PolarizationEllipse[dense];
         Length[selected] == 3 &&
             jonesNearQ[selected[[1, 1, 1]], 0.35] &&
-            selected[[1, 2, 1]] === Green &&
-            selected[[1, 3, 1]] === Orange &&
-            styled[[1, 2, 1]] === Red &&
-            styled[[1, 3, 1]] === Red &&
+            selected[[1, 2, 1, 1]] === Green &&
+            selected[[1, 2, 2, 1]] === Orange &&
+            styled[[1, 2, 1, 1]] === Red &&
+            styled[[1, 2, 2, 1]] === Red &&
             jonesNearQ[scaledRadius, 2 baseRadius] &&
             Length[ellipses] == 100 &&
             Length[Cases[ellipses, _Opacity, Infinity]] == Length[ellipses]
     ],
     True,
     TestID -> "Jones ellipses use weights and at most 100 frequencies"
+]
+
+VerificationTest[
+    With[{
+        other = JerryI`THzTDSTools`Jones`JonesMatrix[
+            testJones[[1]], "Terahertz", Interval[{0.25, 0.55}],
+            testJonesWeightFunction
+        ]
+    },
+        With[{
+            shared = JerryI`THzTDSTools`Jones`PolarizationEllipse[
+                {testJones, other}]
+        },
+            Length[shared] == 2 &&
+            (Length /@ shared) === {3, 3} &&
+            shared[[1]] === JerryI`THzTDSTools`Jones`PolarizationEllipse[
+                testJones, Quantity[Interval[{0.25, 0.55}], "Terahertz"]] &&
+            shared[[2]] === JerryI`THzTDSTools`Jones`PolarizationEllipse[
+                other, Quantity[Interval[{0.25, 0.55}], "Terahertz"]]
+        ]
+    ],
+    True,
+    TestID -> "Grouped ellipses use the overlap of stored intervals"
 ]

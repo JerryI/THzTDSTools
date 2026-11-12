@@ -4,7 +4,7 @@ BeginPackage["JerryI`THzTDSTools`Jones`", {
 
 JonesMatrix::usage = "JonesMatrix[sample, reference] constructs a frequency-dependent Jones matrix. A JonesMatrix object accepts a frequency Quantity for one matrix or a frequency-interval Quantity for its weighted average.";
 OpticalAxisAnalysis::usage = "OpticalAxisAnalysis[matrix] analyzes a numeric 2x2 Jones matrix. OpticalAxisAnalysis[jones, interval] analyzes its weighted average over a frequency interval.";
-PolarizationEllipse::usage = "PolarizationEllipse[matrix, scale] draws ellipses for a numeric 2x2 transmission matrix. PolarizationEllipse[jones, interval, scale] returns weighted ellipses for up to 100 frequencies.";
+PolarizationEllipse::usage = "PolarizationEllipse[matrix, scale] draws eigenpolarization ellipses. PolarizationEllipse[jones, interval, scale] samples up to 100 frequencies. PolarizationEllipse[{jones1, jones2, ...}] returns one group of primitives per Jones matrix on a shared frequency grid.";
 OpticalAxesTransmission::usage = "OpticalAxesTransmission[jones, opticalAxes] returns two {frequency, magnitude, phase} spectra using an OpticalAxisAnalysis association, two Jones vectors, or \"Circular\".";
 
 Begin["`Private`"]
@@ -125,7 +125,15 @@ JonesMatrix[f_InterpolatingFunction, units_String, interval_Interval, weights_In
         },
             If[arr === {} || Total[w] <= 0,
                 Message[JonesMatrix::interval]; $Failed,
-                Total[MapThread[#1 #2 &, {arr[[All, 2]], w}]]/Total[w]
+                With[{
+                    anchorVector = Conjugate[Flatten[arr[[First[Ordering[w, -1]], 2]]]],
+                    matrices = arr[[All, 2]]
+                },
+                    Total[MapThread[
+                        #2 Exp[-I Arg[anchorVector.Flatten[#1]]] #1 &,
+                        {matrices, w}
+                    ]]/Total[w]
+                ]
             ]
         ]
     ]
@@ -179,40 +187,70 @@ OpticalAxesTransmission[j: JonesMatrix[f_InterpolatingFunction, units_String, _I
     ]
 ]
 
-PolarizationEllipse[j: JonesMatrix[f_InterpolatingFunction, units_String, default_Interval, weights_InterpolatingFunction],
+PolarizationEllipse::interval = "The Jones matrices have no sampled frequencies in their common interval."
+
+polarizationEllipseAt[JonesMatrix[f_InterpolatingFunction, _String, _Interval, weights_InterpolatingFunction],
+                      frequencies_List, scale_, opts___] := SortBy[
+    {Opacity[Clip[weights[#], {0, 1}]], PolarizationEllipse[f[#], scale, opts]} & /@ frequencies,
+    #[[1, 1]] &
+]
+
+PolarizationEllipse[j: JonesMatrix[f_InterpolatingFunction, units_String, default_Interval, _InterpolatingFunction],
                     interval:(Automatic | _Quantity):Automatic,
                     Optional[scale_?NumericQ, 1],
-                    opts:OptionsPattern[]] := With[{samples = BlockRandom[RandomSeed[123]; RandomReal[default[[1]], 15]]}, With[{
+                    opts:OptionsPattern[]] := With[{
     qi = QuantityMagnitude[If[interval === Automatic,
         Quantity[default, units], interval], units]
 }, {
-    arr = Select[extractIData[f], qi[[1,1]] <= #[[1]] <= qi[[1,2]] &]
+    frequencies = Select[Flatten[f["Grid"]], qi[[1,1]] <= # <= qi[[1,2]] &]
 },
-    If[interval === Automatic,
-        With[{
-            sampledWeights = Map[weights, samples]
-        },
-         MapThread[Function[{e,w}, {Opacity[w], e}], 
-          Transpose@SortBy[Transpose[{
-            PolarizationEllipse/@Map[f, samples], 
-            Sqrt[sampledWeights/Max[sampledWeights]]
-          }], Last]]
-        ]
-    ,
-     If[arr === {}, {},
-        With[{sampled = If[Length[arr] > 100,
-            arr[[Round[Subdivide[1, Length[arr], 99]]]], arr]},
-            
-            SortBy[Function[row,
-                {   
-                    PolarizationEllipse[row[[2]], scale, opts],
-                    Opacity[Clip[weights[row[[1]]], {0, 1}]]
-                }
-            ] /@ sampled, Function[k, k[[2,1]] ]]
-        ]
-     ]
+    If[frequencies === {}, {},
+        polarizationEllipseAt[j,
+            If[Length[frequencies] > 100,
+                frequencies[[Round[Subdivide[1, Length[frequencies], 99]]]],
+                frequencies
+            ], scale, opts]
     ]
-] ]
+]
+
+PolarizationEllipse[jones:{__JonesMatrix},
+                    interval:(Automatic | _Quantity):Automatic,
+                    Optional[scale_?NumericQ, 1],
+                    opts:OptionsPattern[]] := With[{
+    units = jones[[1, 2]]
+}, {
+    requested = If[interval === Automatic,
+        QuantityMagnitude[Quantity[#[[3]], #[[2]]], units] & /@ jones,
+        {QuantityMagnitude[interval, units]}
+    ],
+    domains = QuantityMagnitude[
+        Quantity[Interval[MinMax[Flatten[#[[1]]["Grid"]]]], #[[2]]], units
+    ] & /@ jones
+}, {
+    bounds = First /@ Join[requested, domains]
+}, {
+    low = Max[bounds[[All, 1]]],
+    high = Min[bounds[[All, 2]]]
+},
+    If[low > high,
+        Message[PolarizationEllipse::interval]; $Failed,
+        With[{
+            frequencies = Select[Flatten[jones[[1, 1]]["Grid"]], low <= # <= high &]
+        },
+            If[frequencies === {},
+                Message[PolarizationEllipse::interval]; $Failed,
+                With[{
+                    sampled = If[Length[frequencies] > 100,
+                        frequencies[[Round[Subdivide[1, Length[frequencies], 99]]]],
+                        frequencies
+                    ]
+                },
+                    polarizationEllipseAt[#, sampled, scale, opts] & /@ jones
+                ]
+            ]
+        ]
+    ]
+]
 
 PolarizationEllipse[j:{{_?NumberQ, _?NumberQ}, {_?NumberQ, _?NumberQ}}, Optional[scale_?NumericQ, 1], OptionsPattern[]] := With[{
     analysis = opticalAxisAnalysis[j],

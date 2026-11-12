@@ -368,7 +368,7 @@ The implementation evaluates this with `LinearSolve[Treference, Tsample]` instea
 
 Evaluate the resulting object at a frequency `Quantity` to obtain a numeric 2×2 matrix.
 
-Evaluate it at a frequency-interval `Quantity`, such as `Quantity[Interval[{0.5, 1.5}], "Terahertz"]`, to obtain the spectral-weighted average of its sampled matrices in that interval.
+Evaluate it at a frequency-interval `Quantity`, such as `Quantity[Interval[{0.5, 1.5}], "Terahertz"]`, to obtain a weighted average of its sampled matrices. Before averaging, each matrix is rotated to match the common phase of the highest-weight matrix. This preserves the polarization response when propagation delay makes the phase wind across the band. The result retains the anchor matrix's common phase; use a single frequency when its absolute phase matters.
 
 ```wl
 (* Inspect the calibrated matrix at one frequency. *)
@@ -384,7 +384,7 @@ averageMatrix = jones[band];
 
 **`OpticalAxisAnalysis[jones, interval]`**
 
-For a numeric 2×2 transmission matrix, returns an optical-axis analysis association directly. For a frequency-dependent `JonesMatrix`, first evaluates its weighted average over `interval`.
+For a numeric 2×2 transmission matrix, returns an optical-axis analysis association directly. For a frequency-dependent `JonesMatrix`, first evaluates its phase-aligned, weighted average over `interval`.
 
 Omitting `interval` uses the interval stored in `jones`.
 
@@ -461,7 +461,11 @@ Draws two polarization ellipses from a numeric 2×2 transmission matrix. `scale`
 
 **`PolarizationEllipse[jones, interval, scale]`**
 
-Returns graphics primitives for the two polarization ellipses at each selected frequency. It uses the stored interval by default and samples at most 100 frequencies.
+Returns graphics primitives for the two polarization ellipses at each selected frequency. It uses the stored interval by default and samples up to 100 frequencies deterministically.
+
+**`PolarizationEllipse[{jones1, jones2, ...}, interval, scale]`**
+
+Returns one set of graphics primitives per Jones matrix, using the same sampled frequencies for all. By default the common band is the intersection of their stored intervals. Supply `interval` to compare a chosen band instead.
 
 Each frequency group's opacity comes from its spectral weight. `PlotStyle` is passed to the per-frequency ellipse drawing.
 
@@ -475,9 +479,18 @@ Graphics[
 
 (* Overlay frequency-dependent ellipses across the stored confidence band. *)
 Graphics[PolarizationEllipse[jones], PlotRange -> 1.2]
+
+(* Compare temperatures on one frequency grid. *)
+temperatures = {100., 70., 60., 50., 5.};
+Graphics[#, PlotRange -> 1.2, AspectRatio -> 1] & /@
+  PolarizationEllipse[d /@ temperatures]
 ```
 
 ### Utilities
+
+**`AveragedRefrectiveIndex[response, thickness]`**
+
+Estimates the mean index from the response pulse delay. For frequency spectra, it smooths the reconstructed time trace over three samples before finding the pulse, so isolated inversion spikes do not set the delay. Time-trace inputs use their original samples.
 
 **`TimeTraceQ[input]`**
 
