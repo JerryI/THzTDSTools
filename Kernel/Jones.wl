@@ -393,8 +393,8 @@ eigenvalueColorData[axisAnalysis_Association] := Module[
     {0, 1}
   ];
   degeneracy = 1 - separation;
-  firstColor = Blend[{StandardRed, White}, degeneracy degeneracy];
-  secondColor = Blend[{StandardBlue, White}, degeneracy degeneracy];
+  firstColor = Blend[{StandardRed, StandardGreen}, degeneracy degeneracy];
+  secondColor = Blend[{StandardBlue, StandardGreen}, degeneracy degeneracy];
   {firstColor, secondColor}
 ]
 
